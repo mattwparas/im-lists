@@ -1,5 +1,7 @@
 use std::{ops::Deref, rc::Rc, sync::Arc};
 
+use std::fmt::Debug;
+
 // pub trait DummyClone {
 //     fn dummy_clone(&self) -> Self;
 // }
@@ -22,7 +24,24 @@ impl<T> RefCountedConstructor<T> for RcConstructor {
     {
         (**ptr).clone()
     }
+
+    fn fmt(ptr: &Option<Self::RC>, f: &mut std::fmt::Formatter<'_>) -> Box<dyn std::fmt::Debug>
+    where
+        T: Debug,
+    {
+        // f.debug_tuple("").field(ptr).finish()
+        // unimplemented!()
+        // Box::new(ptr)
+
+        unimplemented!()
+    }
 }
+
+// impl std::fmt::Debug for RcConstructor {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.debug_struct("Rc").finish()
+//     }
+// }
 
 #[derive(Clone)]
 pub struct ArcConstructor {}
@@ -36,21 +55,28 @@ impl<T> RefCountedConstructor<T> for ArcConstructor {
     {
         todo!()
     }
-}
 
-#[derive(Clone)]
-pub struct GcConstructor {}
-
-impl<T: Clone> RefCountedConstructor<T> for GcConstructor {
-    type RC = Gc<T>;
-
-    fn unwrap(ptr: &Self::RC) -> T
+    fn fmt(ptr: &Option<Self::RC>, f: &mut std::fmt::Formatter<'_>) -> Box<dyn std::fmt::Debug>
     where
-        T: Clone,
+        T: Debug,
     {
-        todo!()
+        unimplemented!()
     }
 }
+
+// #[derive(Clone)]
+// pub struct GcConstructor {}
+
+// impl<T: Clone + Debug> RefCountedConstructor<T> for GcConstructor {
+//     type RC = Gc<T>;
+
+//     fn unwrap(ptr: &Self::RC) -> T
+//     where
+//         T: Clone,
+//     {
+//         todo!()
+//     }
+// }
 
 // Definition and impls for RefCounted
 pub trait RefCounted: Clone {
@@ -75,6 +101,10 @@ pub trait RefCountedConstructor<T>: Clone {
     fn unwrap(ptr: &Self::RC) -> T
     where
         T: Clone;
+
+    fn fmt(ptr: &Option<Self::RC>, f: &mut std::fmt::Formatter<'_>) -> Box<dyn std::fmt::Debug>
+    where
+        T: Debug;
 }
 
 // trait Clone
@@ -155,49 +185,49 @@ impl<T> RefCounted for Arc<T> {
     }
 }
 
-#[derive(Clone)]
-pub struct Gc<T>(Rc<T>);
+// #[derive(Clone)]
+// pub struct Gc<T>(Rc<T>);
 
-impl<T: Clone> RefCounted for Gc<T> {
-    type Target = T;
+// impl<T: Clone + Debug> RefCounted for Gc<T> {
+//     type Target = T;
 
-    fn new(obj: Self::Target) -> Self {
-        todo!()
-    }
+//     fn new(obj: Self::Target) -> Self {
+//         todo!()
+//     }
 
-    fn strong_count(this: &Self) -> usize {
-        todo!()
-    }
+//     fn strong_count(this: &Self) -> usize {
+//         todo!()
+//     }
 
-    fn unwrap(&self) -> Self::Target {
-        todo!()
-    }
+//     fn unwrap(&self) -> Self::Target {
+//         todo!()
+//     }
 
-    fn try_unwrap(this: Self) -> Option<Self::Target> {
-        todo!()
-    }
+//     fn try_unwrap(this: Self) -> Option<Self::Target> {
+//         todo!()
+//     }
 
-    fn get_mut(&mut self) -> Option<&mut Self::Target> {
-        todo!()
-    }
+//     fn get_mut(&mut self) -> Option<&mut Self::Target> {
+//         todo!()
+//     }
 
-    fn make_mut(&mut self) -> &mut Self::Target {
-        todo!()
-    }
+//     fn make_mut(&mut self) -> &mut Self::Target {
+//         todo!()
+//     }
 
-    fn ptr_eq(this: &Self, other: &Self) -> bool {
-        todo!()
-    }
+//     fn ptr_eq(this: &Self, other: &Self) -> bool {
+//         todo!()
+//     }
 
-    fn as_ptr(&self) -> *const Self::Target {
-        todo!()
-    }
-}
+//     fn as_ptr(&self) -> *const Self::Target {
+//         todo!()
+//     }
+// }
 
-impl<T> Deref for Gc<T> {
-    type Target = T;
+// impl<T> Deref for Gc<T> {
+//     type Target = T;
 
-    fn deref(&self) -> &Self::Target {
-        todo!()
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         todo!()
+//     }
+// }

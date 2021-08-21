@@ -20,11 +20,23 @@ pub enum UnrolledList<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> {
     Nil,
 }
 
-#[derive(Hash, Debug, Clone)]
+#[derive(Hash, Clone)]
 pub struct UnrolledCell<T: Clone, S: RefCountedConstructor<Self>> {
     pub index: usize,
     pub elements: Vec<T>,
     pub cdr: Option<S::RC>,
+}
+
+impl<T: Clone + std::fmt::Debug, S: RefCountedConstructor<Self>> std::fmt::Debug
+    for UnrolledCell<T, S>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UnrolledCell")
+            .field("index", &self.index)
+            .field("elements", &self.elements)
+            // .field("cdr", &S::fmt(&self.cdr, f))
+            .finish()
+    }
 }
 
 impl<T: Clone, S: RefCountedConstructor<Self>> UnrolledCell<T, S> {
@@ -37,7 +49,8 @@ impl<T: Clone, S: RefCountedConstructor<Self>> UnrolledCell<T, S> {
     }
 
     pub fn car(&self) -> Option<&T> {
-        self.elements.get(self.index)
+        // println!("Getting value at index: {}", self.index);
+        self.elements.get(self.index - 1)
     }
 
     pub fn cdr(&self) -> Option<S::RC> {
@@ -72,11 +85,11 @@ impl<T: Clone, S: RefCountedConstructor<Self>> UnrolledCell<T, S> {
     // Spill over the values to a new node
     // otherwise, copy the node and spill over
     pub fn cons(value: T, cdr: S::RC) -> Self {
-        if cdr.elements.len() > CAPACITY {
+        if cdr.elements.len() > CAPACITY - 1 {
             UnrolledCell {
-                index: 0,
+                index: 1,
                 elements: vec![value],
-                cdr: None,
+                cdr: Some(cdr),
             }
         } else {
             let mut new = S::unwrap(&cdr);
@@ -99,16 +112,36 @@ pub struct Iter<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> {
 impl<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> Iterator for Iter<T, S> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
+        // dbg!("calling next");
+        // println!("Has cur: {}", self.cur.is_some());
         if let Some(_self) = &self.cur {
-            dbg!(self.index);
+            // dbg!(self.index);
+            // println!("self.index > 0: {}", self.index > 0);
             if self.index > 0 {
-                let return_value = _self.elements.get(self.index).cloned();
+                // dbg!("getting return value");
+                let return_value = _self.elements.get(self.index - 1).cloned();
                 self.index -= 1;
+                // dbg!(self.index);
                 return_value
             } else {
+                // println!("Has next: {}", _self.cdr.is_some());
                 self.cur = _self.cdr.clone();
-                self.index = self.cur.as_ref().map(|x| x.index).unwrap_or(0);
-                self.cur.as_ref().and_then(|x| x.car().cloned())
+
+                // println!(
+                //     "Next node: {:?}",
+                //     self.cur.as_ref().map(|x| x.elements.len())
+                // );
+
+                self.index = self.cur.as_ref().map(|x| x.elements.len()).unwrap_or(0);
+
+                // println!("Next index: {:?}", self.index);
+                let ret = self.cur.as_ref().and_then(|x| {
+                    // println!("getting car with element length: {}", x.elements.len());
+                    x.car().cloned()
+                });
+
+                // println!("value: {}", ret.is_some());
+                ret
             }
         } else {
             None
@@ -137,10 +170,14 @@ impl<T: Clone, S: RefCountedConstructor<Self>> FromIterator<T> for UnrolledCell<
             .into_iter()
             .chunks(CAPACITY)
             .into_iter()
-            .map(|x| UnrolledCell {
-                index: 0,
-                elements: x.collect(),
-                cdr: None,
+            .map(|x| {
+                let mut elements: Vec<_> = x.collect();
+                elements.reverse();
+                UnrolledCell {
+                    index: elements.len(),
+                    elements,
+                    cdr: None,
+                }
             })
             .collect();
 
@@ -170,12 +207,15 @@ mod tests {
 
     #[test]
     fn basic_iteration() {
-        let list: List<_> = (0..100).into_iter().collect();
+        let list: List<_> = (0..100usize).into_iter().collect();
+        let vec: Vec<_> = (0..100usize).into_iter().collect();
 
-        println!("Running test!");
+        for item in list.clone() {
+            println!("ITERATING: {}", item);
+        }
 
-        for item in list {
-            println!("{}", item);
+        for (left, right) in list.into_iter().zip(vec.into_iter()) {
+            assert_eq!(left, right)
         }
     }
 
@@ -204,8 +244,21 @@ mod tests {
             )),
         );
 
+        println!("list elements: {:?}", list.elements);
+
         for item in list {
             println!("{}", item);
+        }
+    }
+
+    #[test]
+    fn small() {
+        let list: List<_> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9].into_iter().collect();
+
+        println!("list elements: {:?}", list.elements);
+
+        for item in list {
+            println!("ITERATING: {}", item);
         }
     }
 }
