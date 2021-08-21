@@ -10,22 +10,46 @@ use std::{ops::Deref, rc::Rc, sync::Arc};
 //     }
 // }
 
+#[derive(Clone)]
 pub struct RcConstructor {}
 
-impl<T: Clone> RefCountedConstructor<T> for RcConstructor {
+impl<T> RefCountedConstructor<T> for RcConstructor {
     type RC = Rc<T>;
+
+    fn unwrap(ptr: &Self::RC) -> T
+    where
+        T: Clone,
+    {
+        (**ptr).clone()
+    }
 }
 
+#[derive(Clone)]
 pub struct ArcConstructor {}
 
-impl<T: Clone> RefCountedConstructor<T> for ArcConstructor {
+impl<T> RefCountedConstructor<T> for ArcConstructor {
     type RC = Arc<T>;
+
+    fn unwrap(ptr: &Self::RC) -> T
+    where
+        T: Clone,
+    {
+        todo!()
+    }
 }
 
+#[derive(Clone)]
 pub struct GcConstructor {}
 
 impl<T: Clone> RefCountedConstructor<T> for GcConstructor {
     type RC = Gc<T>;
+
+    fn unwrap(ptr: &Self::RC) -> T
+    where
+        T: Clone,
+    {
+        todo!()
+    }
 }
 
 // Definition and impls for RefCounted
@@ -45,8 +69,12 @@ pub trait RefCounted: Clone {
 
 // Avoid creating infinite types by using an additional trait to provide some
 // indirection
-pub trait RefCountedConstructor<T> {
+pub trait RefCountedConstructor<T>: Clone {
     type RC: RefCounted<Target = T> + Deref<Target = T>;
+
+    fn unwrap(ptr: &Self::RC) -> T
+    where
+        T: Clone;
 }
 
 // trait Clone
@@ -65,6 +93,8 @@ impl<T> RefCounted for Rc<T> {
     fn unwrap(&self) -> Self::Target {
         // (**self).clone()
         todo!()
+
+        // *Rc::make_mut(self)
     }
 
     fn try_unwrap(this: Self) -> Option<Self::Target> {

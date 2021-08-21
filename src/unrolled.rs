@@ -15,6 +15,11 @@ const CAPACITY: usize = 8;
 
 */
 
+pub enum UnrolledList<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> {
+    Cons(UnrolledCell<T, S>),
+    Nil,
+}
+
 #[derive(Hash, Debug, Clone)]
 pub struct UnrolledCell<T: Clone, S: RefCountedConstructor<Self>> {
     pub index: usize,
@@ -74,7 +79,7 @@ impl<T: Clone, S: RefCountedConstructor<Self>> UnrolledCell<T, S> {
                 cdr: None,
             }
         } else {
-            let mut new = cdr.unwrap();
+            let mut new = S::unwrap(&cdr);
             new.cons_mut(value);
             new
 
@@ -95,13 +100,14 @@ impl<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> Iterator for Iter<T
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(_self) = &self.cur {
-            if self.index < _self.elements.len() {
+            dbg!(self.index);
+            if self.index > 0 {
                 let return_value = _self.elements.get(self.index).cloned();
-                self.index += 1;
+                self.index -= 1;
                 return_value
             } else {
                 self.cur = _self.cdr.clone();
-                self.index = 0;
+                self.index = self.cur.as_ref().map(|x| x.index).unwrap_or(0);
                 self.cur.as_ref().and_then(|x| x.car().cloned())
             }
         } else {
@@ -117,7 +123,7 @@ impl<T: Clone, S: RefCountedConstructor<Self>> IntoIterator for UnrolledCell<T, 
 
     fn into_iter(self) -> Self::IntoIter {
         Iter {
-            index: 0,
+            index: self.index,
             cur: Some(S::RC::new(self)),
             _inner: PhantomData,
         }
@@ -165,6 +171,8 @@ mod tests {
     #[test]
     fn basic_iteration() {
         let list: List<_> = (0..100).into_iter().collect();
+
+        println!("Running test!");
 
         for item in list {
             println!("{}", item);
