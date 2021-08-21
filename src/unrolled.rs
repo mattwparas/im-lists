@@ -140,6 +140,12 @@ impl<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> Iterator for Iter<T
                     x.car().cloned()
                 });
 
+                if ret.is_some() {
+                    self.index -= 1;
+                }
+
+                // self.index += 1;
+
                 // println!("value: {}", ret.is_some());
                 ret
             }
