@@ -27,15 +27,23 @@ pub struct UnrolledCell<T: Clone, S: RefCountedConstructor<Self>> {
     pub cdr: Option<S::RC>,
 }
 
+// impl<T: Clone + std::fmt::Debug, S: RefCountedConstructor<Self>> std::fmt::Debug
+//     for UnrolledCell<T, S>
+// {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.debug_struct("UnrolledCell")
+//             .field("index", &self.index)
+//             .field("elements", &self.elements)
+//             // .field("cdr", &S::fmt(&self.cdr, f))
+//             .finish()
+//     }
+// }
+
 impl<T: Clone + std::fmt::Debug, S: RefCountedConstructor<Self>> std::fmt::Debug
     for UnrolledCell<T, S>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("UnrolledCell")
-            .field("index", &self.index)
-            .field("elements", &self.elements)
-            // .field("cdr", &S::fmt(&self.cdr, f))
-            .finish()
+        f.debug_list().entries(self).finish()
     }
 }
 
@@ -49,7 +57,6 @@ impl<T: Clone, S: RefCountedConstructor<Self>> UnrolledCell<T, S> {
     }
 
     pub fn car(&self) -> Option<&T> {
-        // println!("Getting value at index: {}", self.index);
         self.elements.get(self.index - 1)
     }
 
@@ -95,10 +102,6 @@ impl<T: Clone, S: RefCountedConstructor<Self>> UnrolledCell<T, S> {
             let mut new = S::unwrap(&cdr);
             new.cons_mut(value);
             new
-
-            // let mut other = cdr.unwrap();
-
-            // other.clone()
         }
     }
 }
@@ -112,41 +115,18 @@ pub struct Iter<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> {
 impl<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> Iterator for Iter<T, S> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
-        // dbg!("calling next");
-        // println!("Has cur: {}", self.cur.is_some());
         if let Some(_self) = &self.cur {
-            // dbg!(self.index);
-            // println!("self.index > 0: {}", self.index > 0);
             if self.index > 0 {
-                // dbg!("getting return value");
                 let return_value = _self.elements.get(self.index - 1).cloned();
                 self.index -= 1;
-                // dbg!(self.index);
                 return_value
             } else {
-                // println!("Has next: {}", _self.cdr.is_some());
                 self.cur = _self.cdr.clone();
-
-                // println!(
-                //     "Next node: {:?}",
-                //     self.cur.as_ref().map(|x| x.elements.len())
-                // );
-
                 self.index = self.cur.as_ref().map(|x| x.elements.len()).unwrap_or(0);
-
-                // println!("Next index: {:?}", self.index);
-                let ret = self.cur.as_ref().and_then(|x| {
-                    // println!("getting car with element length: {}", x.elements.len());
-                    x.car().cloned()
-                });
-
+                let ret = self.cur.as_ref().and_then(|x| x.car().cloned());
                 if ret.is_some() {
                     self.index -= 1;
                 }
-
-                // self.index += 1;
-
-                // println!("value: {}", ret.is_some());
                 ret
             }
         } else {
@@ -164,6 +144,21 @@ impl<T: Clone, S: RefCountedConstructor<Self>> IntoIterator for UnrolledCell<T, 
         Iter {
             index: self.index,
             cur: Some(S::RC::new(self)),
+            _inner: PhantomData,
+        }
+    }
+}
+
+// and we'll implement IntoIterator for references
+// TODO
+impl<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> IntoIterator for &UnrolledCell<T, S> {
+    type Item = T;
+    type IntoIter = Iter<Self::Item, S>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Iter {
+            index: self.index,
+            cur: Some(S::RC::new(self.clone())), // TODO
             _inner: PhantomData,
         }
     }
@@ -262,6 +257,8 @@ mod tests {
         let list: List<_> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9].into_iter().collect();
 
         println!("list elements: {:?}", list.elements);
+
+        println!("list: {:?}", list);
 
         for item in list {
             println!("ITERATING: {}", item);
