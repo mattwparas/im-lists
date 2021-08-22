@@ -3,9 +3,11 @@ use std::marker::PhantomData;
 
 use itertools::Itertools;
 
+use crate::shared::ArcConstructor;
+use crate::shared::BoxConstructor;
 use crate::shared::RcConstructor;
-use crate::shared::RefCounted;
-use crate::shared::RefCountedConstructor;
+use crate::shared::SmartPointer;
+use crate::shared::SmartPointerConstructor;
 
 const CAPACITY: usize = 8;
 
@@ -15,13 +17,13 @@ const CAPACITY: usize = 8;
 
 */
 
-pub enum UnrolledList<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> {
-    Cons(UnrolledCell<T, S>),
-    Nil,
-}
+// pub enum UnrolledList<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> {
+//     Cons(UnrolledCell<T, S>),
+//     Nil,
+// }
 
 #[derive(Hash, Clone)]
-pub struct UnrolledCell<T: Clone, S: RefCountedConstructor<Self>> {
+pub struct UnrolledCell<T: Clone, S: SmartPointerConstructor<Self>> {
     pub index: usize,
     pub elements: Vec<T>,
     pub cdr: Option<S::RC>,
@@ -39,7 +41,7 @@ pub struct UnrolledCell<T: Clone, S: RefCountedConstructor<Self>> {
 //     }
 // }
 
-impl<T: Clone + std::fmt::Debug, S: RefCountedConstructor<Self>> std::fmt::Debug
+impl<T: Clone + std::fmt::Debug, S: SmartPointerConstructor<Self>> std::fmt::Debug
     for UnrolledCell<T, S>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -47,7 +49,7 @@ impl<T: Clone + std::fmt::Debug, S: RefCountedConstructor<Self>> std::fmt::Debug
     }
 }
 
-impl<T: Clone, S: RefCountedConstructor<Self>> UnrolledCell<T, S> {
+impl<T: Clone, S: SmartPointerConstructor<Self>> UnrolledCell<T, S> {
     pub fn new() -> Self {
         UnrolledCell {
             index: 0,
@@ -106,13 +108,13 @@ impl<T: Clone, S: RefCountedConstructor<Self>> UnrolledCell<T, S> {
     }
 }
 
-pub struct Iter<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> {
+pub struct Iter<T: Clone, S: SmartPointerConstructor<UnrolledCell<T, S>>> {
     cur: Option<S::RC>,
     index: usize,
     _inner: PhantomData<T>,
 }
 
-impl<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> Iterator for Iter<T, S> {
+impl<T: Clone, S: SmartPointerConstructor<UnrolledCell<T, S>>> Iterator for Iter<T, S> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(_self) = &self.cur {
@@ -136,7 +138,7 @@ impl<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> Iterator for Iter<T
 }
 
 // and we'll implement IntoIterator
-impl<T: Clone, S: RefCountedConstructor<Self>> IntoIterator for UnrolledCell<T, S> {
+impl<T: Clone, S: SmartPointerConstructor<Self>> IntoIterator for UnrolledCell<T, S> {
     type Item = T;
     type IntoIter = Iter<Self::Item, S>;
 
@@ -151,7 +153,9 @@ impl<T: Clone, S: RefCountedConstructor<Self>> IntoIterator for UnrolledCell<T, 
 
 // and we'll implement IntoIterator for references
 // TODO
-impl<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> IntoIterator for &UnrolledCell<T, S> {
+impl<T: Clone, S: SmartPointerConstructor<UnrolledCell<T, S>>> IntoIterator
+    for &UnrolledCell<T, S>
+{
     type Item = T;
     type IntoIter = Iter<Self::Item, S>;
 
@@ -165,7 +169,7 @@ impl<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> IntoIterator for &U
 }
 
 // and we'll implement FromIterator
-impl<T: Clone, S: RefCountedConstructor<Self>> FromIterator<T> for UnrolledCell<T, S> {
+impl<T: Clone, S: SmartPointerConstructor<Self>> FromIterator<T> for UnrolledCell<T, S> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut pairs: Vec<UnrolledCell<T, S>> = iter
             .into_iter()
@@ -199,6 +203,8 @@ impl<T: Clone, S: RefCountedConstructor<Self>> FromIterator<T> for UnrolledCell<
 }
 
 pub type List<T> = UnrolledCell<T, RcConstructor>;
+pub type ArcList<T> = UnrolledCell<T, ArcConstructor>;
+pub type BoxList<T> = UnrolledCell<T, BoxConstructor>;
 
 #[cfg(test)]
 mod tests {

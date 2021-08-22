@@ -15,7 +15,7 @@ use std::fmt::Debug;
 #[derive(Clone)]
 pub struct RcConstructor {}
 
-impl<T> RefCountedConstructor<T> for RcConstructor {
+impl<T> SmartPointerConstructor<T> for RcConstructor {
     type RC = Rc<T>;
 
     fn unwrap(ptr: &Self::RC) -> T
@@ -46,14 +46,35 @@ impl<T> RefCountedConstructor<T> for RcConstructor {
 #[derive(Clone)]
 pub struct ArcConstructor {}
 
-impl<T> RefCountedConstructor<T> for ArcConstructor {
+impl<T> SmartPointerConstructor<T> for ArcConstructor {
     type RC = Arc<T>;
 
     fn unwrap(ptr: &Self::RC) -> T
     where
         T: Clone,
     {
-        todo!()
+        (**ptr).clone()
+    }
+
+    fn fmt(ptr: &Option<Self::RC>, f: &mut std::fmt::Formatter<'_>) -> Box<dyn std::fmt::Debug>
+    where
+        T: Debug,
+    {
+        unimplemented!()
+    }
+}
+
+#[derive(Clone)]
+pub struct BoxConstructor {}
+
+impl<T: Clone> SmartPointerConstructor<T> for BoxConstructor {
+    type RC = Box<T>;
+
+    fn unwrap(ptr: &Self::RC) -> T
+    where
+        T: Clone,
+    {
+        (**ptr).clone()
     }
 
     fn fmt(ptr: &Option<Self::RC>, f: &mut std::fmt::Formatter<'_>) -> Box<dyn std::fmt::Debug>
@@ -79,7 +100,7 @@ impl<T> RefCountedConstructor<T> for ArcConstructor {
 // }
 
 // Definition and impls for RefCounted
-pub trait RefCounted: Clone {
+pub trait SmartPointer: Clone {
     type Target;
 
     fn new(obj: Self::Target) -> Self;
@@ -95,8 +116,8 @@ pub trait RefCounted: Clone {
 
 // Avoid creating infinite types by using an additional trait to provide some
 // indirection
-pub trait RefCountedConstructor<T>: Clone {
-    type RC: RefCounted<Target = T> + Deref<Target = T>;
+pub trait SmartPointerConstructor<T>: Clone {
+    type RC: SmartPointer<Target = T> + Deref<Target = T>;
 
     fn unwrap(ptr: &Self::RC) -> T
     where
@@ -109,7 +130,7 @@ pub trait RefCountedConstructor<T>: Clone {
 
 // trait Clone
 
-impl<T> RefCounted for Rc<T> {
+impl<T> SmartPointer for Rc<T> {
     type Target = T;
 
     fn new(obj: T) -> Rc<T> {
@@ -149,7 +170,7 @@ impl<T> RefCounted for Rc<T> {
     }
 }
 
-impl<T> RefCounted for Arc<T> {
+impl<T> SmartPointer for Arc<T> {
     type Target = T;
 
     fn new(obj: T) -> Arc<T> {
@@ -161,6 +182,43 @@ impl<T> RefCounted for Arc<T> {
     }
 
     fn unwrap(&self) -> Self::Target {
+        todo!()
+    }
+
+    fn try_unwrap(this: Self) -> Option<Self::Target> {
+        todo!()
+    }
+
+    fn get_mut(&mut self) -> Option<&mut Self::Target> {
+        todo!()
+    }
+
+    fn make_mut(&mut self) -> &mut Self::Target {
+        todo!()
+    }
+
+    fn ptr_eq(this: &Self, other: &Self) -> bool {
+        todo!()
+    }
+
+    fn as_ptr(&self) -> *const Self::Target {
+        todo!()
+    }
+}
+
+impl<T: Clone> SmartPointer for Box<T> {
+    type Target = T;
+
+    fn new(obj: Self::Target) -> Self {
+        Box::new(obj)
+    }
+
+    fn strong_count(this: &Self) -> usize {
+        1
+    }
+
+    fn unwrap(&self) -> Self::Target {
+        // *self.clone()
         todo!()
     }
 

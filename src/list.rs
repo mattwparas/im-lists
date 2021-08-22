@@ -1,13 +1,13 @@
-use crate::shared::{ArcConstructor, RcConstructor, RefCounted, RefCountedConstructor};
+use crate::shared::{ArcConstructor, RcConstructor, SmartPointer, SmartPointerConstructor};
 use std::{iter::FromIterator, marker::PhantomData};
 
 #[derive(Clone, Hash, Debug)]
-pub struct ConsCell<T: Clone, S: RefCountedConstructor<Self>> {
+pub struct ConsCell<T: Clone, S: SmartPointerConstructor<Self>> {
     pub car: T,
     pub cdr: Option<S::RC>,
 }
 
-impl<T: Clone, S: RefCountedConstructor<Self>> ConsCell<T, S> {
+impl<T: Clone, S: SmartPointerConstructor<Self>> ConsCell<T, S> {
     pub fn new(car: T, cdr: Option<S::RC>) -> Self {
         ConsCell { car, cdr }
     }
@@ -25,7 +25,7 @@ impl<T: Clone, S: RefCountedConstructor<Self>> ConsCell<T, S> {
     }
 }
 
-impl<T: Clone, S: RefCountedConstructor<Self>> Drop for ConsCell<T, S> {
+impl<T: Clone, S: SmartPointerConstructor<Self>> Drop for ConsCell<T, S> {
     // don't want to blow the stack with destructors,
     // but also don't want to walk the whole list.
     // So walk the list until we find a non-uniquely owned item
@@ -46,12 +46,12 @@ impl<T: Clone, S: RefCountedConstructor<Self>> Drop for ConsCell<T, S> {
     }
 }
 
-pub struct Iter<T: Clone, S: RefCountedConstructor<ConsCell<T, S>>> {
+pub struct Iter<T: Clone, S: SmartPointerConstructor<ConsCell<T, S>>> {
     cur: Option<S::RC>,
     _inner: PhantomData<T>,
 }
 
-impl<T: Clone, S: RefCountedConstructor<ConsCell<T, S>>> Iterator for Iter<T, S> {
+impl<T: Clone, S: SmartPointerConstructor<ConsCell<T, S>>> Iterator for Iter<T, S> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(_self) = &self.cur {
@@ -65,7 +65,7 @@ impl<T: Clone, S: RefCountedConstructor<ConsCell<T, S>>> Iterator for Iter<T, S>
 }
 
 // and we'll implement IntoIterator
-impl<T: Clone, S: RefCountedConstructor<Self>> IntoIterator for ConsCell<T, S> {
+impl<T: Clone, S: SmartPointerConstructor<Self>> IntoIterator for ConsCell<T, S> {
     type Item = T;
     type IntoIter = Iter<Self::Item, S>;
 
@@ -78,7 +78,7 @@ impl<T: Clone, S: RefCountedConstructor<Self>> IntoIterator for ConsCell<T, S> {
 }
 
 // and we'll implement FromIterator
-impl<T: Clone, S: RefCountedConstructor<Self>> FromIterator<T> for ConsCell<T, S> {
+impl<T: Clone, S: SmartPointerConstructor<Self>> FromIterator<T> for ConsCell<T, S> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut pairs: Vec<ConsCell<T, S>> = iter
             .into_iter()
