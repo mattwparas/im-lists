@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use itertools::Itertools;
 
 use crate::shared::ArcConstructor;
-use crate::shared::BoxConstructor;
+// use crate::shared::BoxConstructor;
 use crate::shared::RcConstructor;
 use crate::shared::SmartPointer;
 use crate::shared::SmartPointerConstructor;
@@ -169,42 +169,118 @@ impl<T: Clone, S: SmartPointerConstructor<UnrolledCell<T, S>>> IntoIterator
 }
 
 // and we'll implement FromIterator
+// impl<T: Clone, S: SmartPointerConstructor<Self>> FromIterator<T> for UnrolledCell<T, S> {
+//     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+//         let mut pairs: Vec<UnrolledCell<T, S>> = iter
+//             .into_iter()
+//             .chunks(CAPACITY)
+//             .into_iter()
+//             .map(|x| {
+//                 let mut elements: Vec<_> = x.collect();
+//                 elements.reverse();
+//                 UnrolledCell {
+//                     index: elements.len(),
+//                     elements,
+//                     cdr: None,
+//                 }
+//             })
+//             .collect();
+
+//         let mut rev_iter = (0..pairs.len()).into_iter().rev();
+//         rev_iter.next();
+
+//         for i in rev_iter {
+//             let prev = pairs.pop().unwrap();
+//             if let Some(UnrolledCell { cdr, .. }) = pairs.get_mut(i) {
+//                 *cdr = Some(S::RC::new(prev))
+//             } else {
+//                 unreachable!()
+//             }
+//         }
+
+//         pairs.pop().unwrap()
+//     }
+// }
+
 impl<T: Clone, S: SmartPointerConstructor<Self>> FromIterator<T> for UnrolledCell<T, S> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        let mut pairs: Vec<UnrolledCell<T, S>> = iter
-            .into_iter()
-            .chunks(CAPACITY)
-            .into_iter()
-            .map(|x| {
-                let mut elements: Vec<_> = x.collect();
-                elements.reverse();
-                UnrolledCell {
-                    index: elements.len(),
-                    elements,
-                    cdr: None,
-                }
-            })
-            .collect();
+        let chunks_iter = iter.into_iter().chunks(CAPACITY);
 
-        let mut rev_iter = (0..pairs.len()).into_iter().rev();
-        rev_iter.next();
-
-        for i in rev_iter {
-            let prev = pairs.pop().unwrap();
-            if let Some(UnrolledCell { cdr, .. }) = pairs.get_mut(i) {
-                *cdr = Some(S::RC::new(prev))
-            } else {
-                unreachable!()
+        let mut iter = chunks_iter.into_iter().map(|x| {
+            let mut elements: Vec<_> = x.collect();
+            elements.reverse();
+            UnrolledCell {
+                index: elements.len(),
+                elements,
+                cdr: None,
             }
+        });
+
+        // next pointer to go to
+        let mut next;
+
+        // Keep track of the last two pairs inside the iterator
+        // [ 1 2 3 4 5 6 7 8 9 10 ]
+        //  ^^^^
+        //    ^^^^
+        //      ^^^^
+        // let mut keep_alive: (Option<_>, Option<_>) = (None, None);
+
+        // Get the head
+        // [1  2  3  4  5]
+        // ^^
+        let mut head = iter.next().expect("Missing cell in UnrolledCell");
+        // let ret_val = head.clone();
+
+        // Get the next value
+        // [1  2  3  4  5]
+        //    ^^
+        // let current =;
+        // let mut next = iter.next().map(S::RC::new);
+        head.cdr = iter.next().map(S::RC::new);
+
+        let mut current = &mut head.cdr;
+
+        for cell in iter {
+            next = Some(S::RC::new(cell));
+
+            if let Some(mut inner) = head.cdr {
+                let cur_mut = S::RC::get_mut(&mut inner).expect("Should only have one reference");
+                cur_mut.cdr = next.clone();
+                head = next;
+            } else {
+                break;
+            }
+
+            // current.cdr = next.clone();
+
+            // keep_alive.0 = Some(current.clone());
+            // keep_alive.1 = next.clone();
         }
 
-        pairs.pop().unwrap()
+        // ret_val
+
+        unimplemented!()
+
+        // let mut rev_iter = (0..pairs.len()).into_iter().rev();
+        // rev_iter.next();
+
+        // for i in rev_iter {
+        //     let prev = pairs.pop().unwrap();
+        //     if let Some(UnrolledCell { cdr, .. }) = pairs.get_mut(i) {
+        //         *cdr = Some(S::RC::new(prev))
+        //     } else {
+        //         unreachable!()
+        //     }
+        // }
+
+        // pairs.pop().unwrap()
     }
 }
 
 pub type List<T> = UnrolledCell<T, RcConstructor>;
 pub type ArcList<T> = UnrolledCell<T, ArcConstructor>;
-pub type BoxList<T> = UnrolledCell<T, BoxConstructor>;
+// pub type BoxList<T> = UnrolledCell<T, BoxConstructor>;
 
 #[cfg(test)]
 mod tests {
@@ -270,4 +346,12 @@ mod tests {
             println!("ITERATING: {}", item);
         }
     }
+
+    // #[test]
+    // fn boxing() {
+    //     let list: BoxList<_> = vec![1, 2, 3, 4, 5].into_iter().collect();
+    //     for item in list {
+    //         println!("ITERATING: {}", item);
+    //     }
+    // }
 }

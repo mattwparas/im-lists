@@ -77,6 +77,18 @@ impl<T: Clone, S: SmartPointerConstructor<Self>> IntoIterator for ConsCell<T, S>
     }
 }
 
+impl<T: Clone, S: SmartPointerConstructor<ConsCell<T, S>>> IntoIterator for &ConsCell<T, S> {
+    type Item = T;
+    type IntoIter = Iter<Self::Item, S>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Iter {
+            cur: Some(S::RC::new(self.clone())),
+            _inner: PhantomData,
+        }
+    }
+}
+
 // and we'll implement FromIterator
 impl<T: Clone, S: SmartPointerConstructor<Self>> FromIterator<T> for ConsCell<T, S> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
@@ -111,15 +123,15 @@ mod tests {
 
     #[test]
     fn basic_iteration() {
-        // let list = vec![1, 2, 3, 4, 5]
-        //     .into_iter()
-        //     .collect::<ConsCell<i32, Rc<_>>>();
+        let list = vec![1, 2, 3, 4, 5]
+            .into_iter()
+            .collect::<RcLinkedList<i32>>();
 
         // let list: RcLinkedList<_> = vec![1, 2, 3, 4, 5].into_iter().collect();
 
-        // for item in list {
-        //     println!("{}", item)
-        // }
+        for item in list {
+            println!("{}", item)
+        }
 
         // let cell: ConsCell<usize, Rc<ConsCell<usize, _>>> =
         //     ConsCell::new(10, Some(Rc::new(ConsCell::new(20, None))));

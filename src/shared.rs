@@ -64,26 +64,26 @@ impl<T> SmartPointerConstructor<T> for ArcConstructor {
     }
 }
 
-#[derive(Clone)]
-pub struct BoxConstructor {}
+// #[derive(Clone)]
+// pub struct BoxConstructor {}
 
-impl<T: Clone> SmartPointerConstructor<T> for BoxConstructor {
-    type RC = Box<T>;
+// impl<T: Clone> SmartPointerConstructor<T> for BoxConstructor {
+//     type RC = Box<T>;
 
-    fn unwrap(ptr: &Self::RC) -> T
-    where
-        T: Clone,
-    {
-        (**ptr).clone()
-    }
+//     fn unwrap(ptr: &Self::RC) -> T
+//     where
+//         T: Clone,
+//     {
+//         (**ptr).clone()
+//     }
 
-    fn fmt(ptr: &Option<Self::RC>, f: &mut std::fmt::Formatter<'_>) -> Box<dyn std::fmt::Debug>
-    where
-        T: Debug,
-    {
-        unimplemented!()
-    }
-}
+//     fn fmt(ptr: &Option<Self::RC>, f: &mut std::fmt::Formatter<'_>) -> Box<dyn std::fmt::Debug>
+//     where
+//         T: Debug,
+//     {
+//         unimplemented!()
+//     }
+// }
 
 // #[derive(Clone)]
 // pub struct GcConstructor {}
@@ -153,7 +153,7 @@ impl<T> SmartPointer for Rc<T> {
     }
 
     fn get_mut(&mut self) -> Option<&mut Self::Target> {
-        todo!()
+        Rc::get_mut(self)
     }
 
     fn make_mut(&mut self) -> &mut Self::Target {
@@ -186,7 +186,7 @@ impl<T> SmartPointer for Arc<T> {
     }
 
     fn try_unwrap(this: Self) -> Option<Self::Target> {
-        todo!()
+        Arc::try_unwrap(this).ok()
     }
 
     fn get_mut(&mut self) -> Option<&mut Self::Target> {
