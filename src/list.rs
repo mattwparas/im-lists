@@ -1,5 +1,24 @@
 use crate::shared::{ArcConstructor, RcConstructor, SmartPointer, SmartPointerConstructor};
-use std::{iter::FromIterator, marker::PhantomData};
+use std::{iter::FromIterator, marker::PhantomData, ops::Index};
+
+/// List trait
+/// This is a generic list implementation that my different list implementations
+/// will attempt to satisfy
+/// - make sure that this can be used in my value implementation for Steel
+pub trait List<T>: Index<usize> {
+    fn new() -> Self;
+    fn cons(car: T, cdr: Self) -> Self;
+    fn append(other: Self) -> Self;
+    fn first(&self) -> Option<T>;
+    fn car(&self) -> Option<T>;
+    fn rest(&self) -> Option<Self>
+    where
+        Self: Sized;
+    fn cdr(&self) -> Option<Self>
+    where
+        Self: Sized;
+    fn get(&self, index: usize) -> Option<&T>;
+}
 
 #[derive(Clone, Hash, Debug)]
 pub struct ConsCell<T: Clone, S: SmartPointerConstructor<Self>> {
