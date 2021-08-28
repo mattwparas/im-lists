@@ -36,6 +36,13 @@ impl<T> SmartPointerConstructor<T> for RcConstructor {
 
         unimplemented!()
     }
+
+    fn make_mut(ptr: &mut Self::RC) -> &mut T
+    where
+        T: Clone,
+    {
+        Rc::make_mut(ptr)
+    }
 }
 
 // impl std::fmt::Debug for RcConstructor {
@@ -62,6 +69,13 @@ impl<T> SmartPointerConstructor<T> for ArcConstructor {
         T: Debug,
     {
         unimplemented!()
+    }
+
+    fn make_mut(ptr: &mut Self::RC) -> &mut T
+    where
+        T: Clone,
+    {
+        todo!()
     }
 }
 
@@ -110,7 +124,7 @@ pub trait SmartPointer: Clone {
     fn unwrap(&self) -> Self::Target;
     fn try_unwrap(this: Self) -> Option<Self::Target>;
     fn get_mut(this: &mut Self) -> Option<&mut Self::Target>;
-    fn make_mut(&mut self) -> &mut Self::Target;
+    // fn make_mut(this: &mut Self) -> &mut Self::Target;
     fn ptr_eq(this: &Self, other: &Self) -> bool;
     fn as_ptr(&self) -> *const Self::Target;
 
@@ -123,6 +137,10 @@ pub trait SmartPointerConstructor<T>: Clone {
     type RC: SmartPointer<Target = T> + Deref<Target = T>;
 
     fn unwrap(ptr: &Self::RC) -> T
+    where
+        T: Clone;
+
+    fn make_mut(ptr: &mut Self::RC) -> &mut T
     where
         T: Clone;
 
@@ -159,10 +177,10 @@ impl<T> SmartPointer for Rc<T> {
         Rc::get_mut(this)
     }
 
-    fn make_mut(&mut self) -> &mut Self::Target {
-        // Rc::make_mut(self)
-        todo!()
-    }
+    // fn make_mut(this: &mut Self) -> &mut Self::Target {
+    //     // Rc::make_mut(self)
+    //     todo!()
+    // }
 
     fn ptr_eq(this: &Self, other: &Self) -> bool {
         Rc::ptr_eq(this, other)
@@ -207,12 +225,12 @@ impl<T> SmartPointer for Arc<T> {
     }
 
     fn get_mut(this: &mut Self) -> Option<&mut Self::Target> {
-        todo!()
+        Arc::get_mut(this)
     }
 
-    fn make_mut(&mut self) -> &mut Self::Target {
-        todo!()
-    }
+    // fn make_mut(this: &mut Self) -> &mut Self::Target {
+    //     todo!()
+    // }
 
     fn ptr_eq(this: &Self, other: &Self) -> bool {
         todo!()
@@ -251,9 +269,9 @@ impl<T: Clone> SmartPointer for Box<T> {
         todo!()
     }
 
-    fn make_mut(&mut self) -> &mut Self::Target {
-        todo!()
-    }
+    // fn make_mut(this: &mut Self) -> &mut Self::Target {
+    //     todo!()
+    // }
 
     fn ptr_eq(this: &Self, other: &Self) -> bool {
         todo!()
