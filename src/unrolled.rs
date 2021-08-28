@@ -23,6 +23,12 @@ impl<
         UnrolledList(S::RC::new(UnrolledCell::new()))
     }
 
+    // This is actually like O(n / 64) which is actually quite nice
+    // Saves us some time
+    pub fn len(&self) -> usize {
+        self.node_iter().map(|node| node.elements().len()).sum()
+    }
+
     // Should be O(1) always
     pub fn car(&self) -> Option<T> {
         self.0.car().cloned()
@@ -50,9 +56,21 @@ impl<
         self.0.full || self.elements().len() <= CAPACITY
     }
 
-    fn node_iter(&self) -> NodeIter<T, C, S> {
-        NodeIter {
-            cur: Some(self.clone()),
+    fn assert_list_invariants(&self) {
+        assert!(self.does_node_satisfy_invariant())
+    }
+
+    pub fn iter<'a>(&'a self) -> IterRef<'a, T, C, S> {
+        IterRef {
+            cur: Some(self),
+            index: self.0.index,
+            _inner: PhantomData,
+        }
+    }
+
+    fn node_iter<'a>(&'a self) -> NodeIterRef<'a, T, C, S> {
+        NodeIterRef {
+            cur: Some(self),
             _inner: PhantomData,
         }
     }
@@ -171,7 +189,7 @@ impl<
     // See if we can coaleasce these nodes
     // Merge the values in - TODO use heuristics to do this rather than just promote blindly
     fn coalesce_nodes(&mut self) {
-        println!("Coalescing nodes");
+        // println!("Coalescing nodes");
 
         let mut cdr = self.cdr();
 
@@ -407,6 +425,74 @@ impl<
     }
 }
 
+struct NodeIterRef<
+    'a,
+    T: Clone,
+    C: SmartPointerConstructor<Vec<T>>,
+    S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+> {
+    cur: Option<&'a UnrolledList<T, C, S>>,
+    _inner: PhantomData<T>,
+}
+
+impl<
+        'a,
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > Iterator for NodeIterRef<'a, T, C, S>
+{
+    type Item = &'a UnrolledList<T, C, S>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(_self) = &self.cur {
+            self.cur = _self.0.cdr.as_ref();
+            return self.cur;
+        } else {
+            None
+        }
+    }
+}
+
+pub struct IterRef<
+    'a,
+    T: Clone,
+    C: SmartPointerConstructor<Vec<T>>,
+    S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+> {
+    cur: Option<&'a UnrolledList<T, C, S>>,
+    index: usize,
+    _inner: PhantomData<T>,
+}
+
+impl<
+        'a,
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > Iterator for IterRef<'a, T, C, S>
+{
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(_self) = &self.cur {
+            if self.index > 0 {
+                let return_value = _self.elements().get(self.index - 1);
+                self.index -= 1;
+                return_value
+            } else {
+                self.cur = _self.0.cdr.as_ref();
+                self.index = self.cur.as_ref().map(|x| x.elements().len()).unwrap_or(0);
+                let ret = self.cur.as_ref().and_then(|x| x.0.car());
+                if ret.is_some() {
+                    self.index -= 1;
+                }
+                ret
+            }
+        } else {
+            None
+        }
+    }
+}
+
 pub struct Iter<
     T: Clone,
     C: SmartPointerConstructor<Vec<T>>,
@@ -604,7 +690,7 @@ mod tests {
 
         left.append(right);
 
-        assert!(left.does_node_satisfy_invariant());
+        left.assert_invariants();
 
         for item in left {
             println!("iterating: {}", item);
@@ -666,7 +752,7 @@ mod iterator_tests {
 
         left.append(right);
 
-        assert!(left.does_node_satisfy_invariant());
+        left.assert_list_invariants();
 
         println!("{:?}", left);
     }
