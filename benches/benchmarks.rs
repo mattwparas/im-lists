@@ -30,15 +30,15 @@ macro_rules! construction {
     }
 }
 
-// fn cons_up_list(c: &mut Criterion) {
-//     c.bench_function("cons-unrolled-list", |b| {
-//         b.iter(|| {
-//             let mut iter = (0..10000usize).into_iter().rev();
-//             let last = List::cons_empty(iter.next().unwrap());
-//             black_box(iter.fold(last, |accum, next| List::cons_raw(next, accum)))
-//         })
-//     });
-// }
+fn cons_up_list(c: &mut Criterion) {
+    c.bench_function("cons-unrolled-list", |b| {
+        b.iter(|| {
+            let iter = (0..10000usize).into_iter().rev();
+            let last = RcList::new();
+            black_box(iter.fold(last, |accum, next| RcList::cons(next, accum)))
+        })
+    });
+}
 
 iteration! {
     size = 10000,
@@ -71,7 +71,7 @@ criterion_group!(
     linked_list_rc_construction,
     immutable_vector_construction,
     vec_construction,
-    // cons_up_list
+    cons_up_list
 );
 
 criterion_main!(benches);

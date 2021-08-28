@@ -1,30 +1,10 @@
-use std::cell::RefCell;
+use crate::shared::{ArcConstructor, RcConstructor, SmartPointer, SmartPointerConstructor};
+use itertools::Itertools;
 use std::cmp::Ordering;
 use std::iter::FromIterator;
 use std::marker::PhantomData;
-use std::ops::Deref;
-use std::rc::Rc;
-
-use itertools::Itertools;
-
-use crate::shared::ArcConstructor;
-// use crate::shared::BoxConstructor;
-use crate::shared::RcConstructor;
-use crate::shared::SmartPointer;
-use crate::shared::SmartPointerConstructor;
 
 const CAPACITY: usize = 64;
-
-/*
-
-[1, 2, 3, 4, 5, 6, 7, 8] -> [9, 10, 11, 12]
-
-*/
-
-// pub enum UnrolledList<T: Clone, S: RefCountedConstructor<UnrolledCell<T, S>>> {
-//     Cons(UnrolledCell<T, S>),
-//     Nil,
-// }
 
 #[derive(Clone)]
 pub struct UnrolledList<
@@ -39,9 +19,17 @@ impl<
         S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
     > UnrolledList<T, C, S>
 {
+    pub fn new() -> Self {
+        UnrolledList(S::RC::new(UnrolledCell::new()))
+    }
+
     // Should be O(1) always
     pub fn car(&self) -> Option<T> {
         self.0.car().cloned()
+    }
+
+    pub fn cons(value: T, other: Self) -> Self {
+        UnrolledCell::cons(value, other)
     }
 
     // Should be O(1) always
@@ -55,7 +43,25 @@ impl<
     }
 
     fn at_capacity(&self) -> bool {
-        self.0.elements.len() == CAPACITY
+        self.0.full || self.0.elements.len() == CAPACITY
+    }
+
+    fn does_node_satisfy_invariant(&self) -> bool {
+        self.0.full || self.elements().len() <= CAPACITY
+    }
+
+    fn node_iter(&self) -> NodeIter<T, C, S> {
+        NodeIter {
+            cur: Some(self.clone()),
+            _inner: PhantomData,
+        }
+    }
+
+    // Every node must have either CAPACITY elements, or be marked as full
+    // Debateable whether I want them marked as full
+    pub fn assert_invariants(&self) -> bool {
+        self.node_iter()
+            .all(|x| Self::does_node_satisfy_invariant(&x))
     }
 
     // TODO document time complexity of this
@@ -70,7 +76,7 @@ impl<
                     return node.0.elements.get(index).cloned();
                 } else {
                     cur = node.cdr();
-                    index += 64;
+                    index += CAPACITY;
                 }
             }
 
@@ -87,12 +93,6 @@ impl<
     // Update it to point to other if it doesn't have space, or move values into this
     // one to fill up the capacity
     fn update_tail_with_other_list(&mut self, mut other: UnrolledList<T, C, S>) {
-        // This doesn't work unless
-        debug_assert!(
-            self.0.cdr.is_none(),
-            "Cannot update tail when active tail exists still!"
-        );
-
         // If we're at capacity, just set the pointer to the next one
         if self.at_capacity() {
             // println!("At capacity, point to next value");
@@ -101,6 +101,7 @@ impl<
             let left_inner = S::make_mut(&mut self.0);
             let right_inner = S::make_mut(&mut other.0);
 
+            // TODO this could fail when the
             let left_vector = C::make_mut(&mut left_inner.elements);
             let right_vector = C::make_mut(&mut right_inner.elements);
 
@@ -120,6 +121,9 @@ impl<
                 // Adjust the indices accordingly
                 left_inner.index = left_vector.len();
                 right_inner.index = 0;
+
+                // Update this node to now point to the right nodes tail
+                std::mem::swap(&mut left_inner.cdr, &mut right_inner.cdr);
             } else {
                 // This is the case where there is still space in the left vector,
                 // but there are too many elements to move over in the right vector
@@ -148,8 +152,42 @@ impl<
                 left_inner.index = CAPACITY;
                 right_inner.index = right_vector.len();
 
+                // Coalesce to the right
+                other.coalesce_nodes();
+
                 // Update this to now point to the other node
                 left_inner.cdr = Some(other);
+
+                // left_inner.cdr.coalesce_nodes();
+
+                // TODO iteratively coalesce the remaining nodes in the list into one?
+                // Or just leave some nodes partially full
+
+                // coaleascing time - merge the nodes
+            }
+        }
+    }
+
+    // See if we can coaleasce these nodes
+    // Merge the values in - TODO use heuristics to do this rather than just promote blindly
+    fn coalesce_nodes(&mut self) {
+        println!("Coalescing nodes");
+
+        let mut cdr = self.cdr();
+
+        loop {
+            if let Some(mut inner) = cdr {
+                let inner_mut = S::make_mut(&mut inner.0);
+                let other = inner_mut.cdr.take();
+
+                if let Some(other_inner) = other {
+                    inner.append(other_inner);
+                    cdr = inner.cdr();
+                } else {
+                    return;
+                }
+            } else {
+                return;
             }
         }
     }
@@ -176,18 +214,14 @@ impl<
     }
 
     // Extend from an iterator over values
-    pub fn extend(&mut self, iter: impl Iterator<Item = T>) {
-        todo!()
+    // TODO optimize this otherwise
+    pub fn extend(&mut self, iter: impl IntoIterator<Item = T>) {
+        self.append(iter.into_iter().collect());
     }
 
     // Will be O(m) where m = n / 64
     // Not log(n) by any stretch, but for small list implementations, saves us some time
     pub fn append(&mut self, other: UnrolledList<T, C, S>) {
-        // Steps -> go to the last pointer
-        // Copy on write update the cdr to point to the new one
-        // TODO - make this fill in the vector that we're using rather than just update the value if possible
-        // BUG - _have_ to fill up the existing vector first, otherwise its possible to goof things up
-        // that way we can use up the capacity that already exists in that node
         match self.0.cdr() {
             Some(mut cur) => {
                 while let Some(next) = cur.0.cdr() {
@@ -199,8 +233,6 @@ impl<
                 self.update_tail_with_other_list(other);
             }
         }
-
-        // todo!()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -229,6 +261,7 @@ pub struct UnrolledCell<
     // Then on clone, do the whole copy on write nonsense
     pub elements: C::RC,
     pub cdr: Option<UnrolledList<T, C, S>>,
+    pub full: bool,
 }
 
 // impl<T: Clone, S: SmartPointerConstructor<Self>> Deref for UnrolledCell<T, S> {
@@ -270,6 +303,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
             index: 0,
             elements: C::RC::new(Vec::new()),
             cdr: None,
+            full: false,
         }
     }
 
@@ -294,17 +328,13 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
             index: self.index + 1,
             elements: self.elements.clone(),
             cdr: self.cdr.clone(),
+            full: false,
         }
     }
 
+    // TODO make this better
     pub fn cons_mut(&mut self, value: T) {
-        println!("Strong count: {}", C::RC::strong_count(&self.elements));
-        // println!("Elements: {:?}", self.elements);
-
-        C::make_mut(&mut self.elements)
-            // .expect("More than one reference in cons_mut")
-            .push(value);
-        // self.elements.push(value);
+        C::make_mut(&mut self.elements).push(value);
         self.index += 1;
     }
 
@@ -313,15 +343,17 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
             index: 0,
             elements: C::RC::new(vec![value]),
             cdr: None,
+            full: false,
         }
     }
 
     pub fn cons_raw(value: T, mut cdr: UnrolledList<T, C, S>) -> UnrolledList<T, C, S> {
-        if cdr.elements().len() > CAPACITY - 1 {
+        if cdr.0.full || cdr.elements().len() > CAPACITY - 1 {
             UnrolledList(S::RC::new(UnrolledCell {
                 index: 1,
                 elements: C::RC::new(vec![value]),
                 cdr: Some(cdr),
+                full: false,
             }))
         } else {
             cdr.cons_mut(value);
@@ -332,32 +364,45 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
     // Spill over the values to a new node
     // otherwise, copy the node and spill over
     pub fn cons(value: T, mut cdr: UnrolledList<T, C, S>) -> UnrolledList<T, C, S> {
-        if cdr.elements().len() > CAPACITY - 1 {
+        if cdr.0.full || cdr.elements().len() > CAPACITY - 1 {
             UnrolledList(S::RC::new(UnrolledCell {
                 index: 1,
                 elements: C::RC::new(vec![value]),
                 cdr: Some(cdr),
+                full: false,
             }))
         } else {
-            // let mut new = S::unwrap(&cdr);
-
-            // let mut inner = S::RC::get_mut(&mut cdr).expect("Testing this should work");
-
-            // cdr.0
-
             let mut inner = S::make_mut(&mut cdr.0);
-
             let elements = C::make_mut(&mut inner.elements);
-
-            // let elements = C::RC::get_mut(&mut cdr.0).expect("More than one reference in cons");
-
             inner.index += 1;
             elements.push(value);
+            cdr
+        }
+    }
+}
 
-            todo!()
+struct NodeIter<
+    T: Clone,
+    C: SmartPointerConstructor<Vec<T>>,
+    S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+> {
+    cur: Option<UnrolledList<T, C, S>>,
+    _inner: PhantomData<T>,
+}
 
-            // new.cons_mut(value);
-            // new
+impl<
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > Iterator for NodeIter<T, C, S>
+{
+    type Item = UnrolledList<T, C, S>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(_self) = &self.cur {
+            self.cur = _self.0.cdr.clone();
+            return self.cur.clone();
+        } else {
+            None
         }
     }
 }
@@ -453,10 +498,12 @@ impl<
             .map(|x| {
                 let mut elements: Vec<_> = x.collect();
                 elements.reverse();
+                let full = elements.len() == CAPACITY;
                 UnrolledList(S::RC::new(UnrolledCell {
                     index: elements.len(),
                     elements: C::RC::new(elements),
                     cdr: None,
+                    full,
                 }))
             })
             .collect();
@@ -475,60 +522,14 @@ impl<
             } else {
                 unreachable!()
             }
-
-            // if let Some(UnrolledCell { cdr, .. }) = pairs.get_mut(i) {
-            //     *cdr = Some(S::RC::new(prev))
-            // } else {
-            //     unreachable!()
-            // }
         }
 
         pairs.pop().unwrap()
     }
 }
 
-// and we'll implement FromIterator
-// impl<T: Clone, S: SmartPointerConstructor<Self>> FromIterator<T> for UnrolledCell<T, S> {
-//     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-//         let iter = iter.into_iter().chunks(CAPACITY);
-
-//         let mut cell_iter = iter.into_iter().map(|x| {
-//             let mut elements: Vec<_> = x.collect();
-//             elements.reverse();
-//             UnrolledCell {
-//                 index: elements.len(),
-//                 elements,
-//                 cdr: None,
-//             }
-//         });
-
-//         let mut head = cell_iter.next().expect("head missing");
-//         let mut next = cell_iter.next().map(S::RC::new);
-
-//         head.cdr = next.as_ref().map(S::RC::clone);
-
-//         for cell in cell_iter {
-//             let wrapped_cell = Some(S::RC::new(cell));
-
-//             if let Some(inner) = &mut next {
-//                 let inner_value =
-//                     S::RC::get_mut_unchecked(inner).expect("Pointer should not be null");
-//                 inner_value.cdr = wrapped_cell.clone();
-//             }
-//             next = wrapped_cell;
-//         }
-
-//         head
-//     }
-// }
-
-// pub type List<T> = UnrolledCell<T, RcConstructor, RcConstructor>;
-// pub type ArcList<T> = UnrolledCell<T, ArcConstructor, RcConstructor>;
-
 pub type RcList<T> = UnrolledList<T, RcConstructor, RcConstructor>;
 pub type ArcList<T> = UnrolledList<T, ArcConstructor, ArcConstructor>;
-
-// pub type BoxList<T> = UnrolledCell<T, BoxConstructor>;
 
 #[cfg(test)]
 mod tests {
@@ -603,10 +604,7 @@ mod tests {
 
         left.append(right);
 
-        println!("left index: {}", left.index());
-        println!("left next elements: {:?}", left.cdr().unwrap().elements());
-
-        println!("{:?}", left);
+        assert!(left.does_node_satisfy_invariant());
 
         for item in left {
             println!("iterating: {}", item);
@@ -620,4 +618,56 @@ mod tests {
     //         println!("ITERATING: {}", item);
     //     }
     // }
+}
+
+#[cfg(test)]
+mod iterator_tests {
+    use super::*;
+
+    #[test]
+    fn basic_construction() {
+        // Assert the left and the right are equivalent after iterating
+        let list: RcList<_> = (0..1000).into_iter().collect();
+        let equivalent_vector: Vec<_> = (0..1000).into_iter().collect();
+
+        for (left, right) in list.into_iter().zip(equivalent_vector) {
+            assert_eq!(left, right);
+        }
+    }
+
+    // Asserts that the iterators are the same
+    #[test]
+    fn iterates_all_elements() {
+        let list: RcList<_> = (0..1000).into_iter().collect();
+        let equivalent_vector: Vec<_> = (0..1000).into_iter().collect();
+
+        assert_eq!(
+            list.into_iter().count(),
+            equivalent_vector.into_iter().count()
+        );
+    }
+
+    // Asserts that the iterator correctly iterates everything
+    #[test]
+    fn iterates_correct_amount() {
+        let count = 1000;
+        let list: RcList<_> = (0..count).into_iter().collect();
+
+        assert_eq!(list.into_iter().count(), count)
+    }
+
+    // TODO verify that this is actually what we want to happen
+    // In some ways this might not be the performance that we want
+    // Profile to make sure
+    #[test]
+    fn node_appending_coalescing_works() {
+        let mut left: RcList<_> = (0..100).into_iter().collect();
+        let right: RcList<_> = (100..200).into_iter().collect();
+
+        left.append(right);
+
+        assert!(left.does_node_satisfy_invariant());
+
+        println!("{:?}", left);
+    }
 }
