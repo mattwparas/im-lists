@@ -4,9 +4,9 @@ use std::cmp::Ordering;
 use std::iter::FromIterator;
 use std::marker::PhantomData;
 
-const CAPACITY: usize = 64;
+const CAPACITY: usize = 256;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct UnrolledList<
     T: Clone,
     C: SmartPointerConstructor<Vec<T>>,
@@ -665,19 +665,12 @@ mod tests {
     fn append() {
         let mut left: RcList<_> = vec![1, 2, 3, 4, 5].into_iter().collect();
         let right: RcList<_> = vec![6, 7, 8, 9, 10].into_iter().collect();
-
-        println!("Left node elements pre append: {:?}", left.elements());
-        println!("Left node next: {:?}", left.0.cdr.is_some());
         left.append(right.clone());
-        println!("Left node elements post append: {:?}", left.elements());
-        println!("Left node next post: {:?}", left.0.cdr.is_some());
 
-        println!("New appended list");
         for item in left {
             println!("Iterating: {}", item);
         }
 
-        println!("Old list");
         for item in right {
             println!("Iterating: {}", item)
         }
