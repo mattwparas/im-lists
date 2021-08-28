@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::iter::FromIterator;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -57,16 +58,35 @@ impl<
         self.0.elements.len() == CAPACITY
     }
 
+    // TODO document time complexity of this
+    // Looks like its O(n / 64)
+    pub fn get(&self, mut index: usize) -> Option<T> {
+        if index < CAPACITY {
+            return self.0.elements.get(index).cloned();
+        } else {
+            let mut cur = self.cdr();
+            while let Some(node) = cur {
+                if index < CAPACITY {
+                    return node.0.elements.get(index).cloned();
+                } else {
+                    cur = node.cdr();
+                    index += 64;
+                }
+            }
+
+            None
+        }
+    }
+
     // fn get_elements_mut(&mut self) -> &mut Vec<T> {
     //     let mut inner = S::make_mut(&mut self.0);
     //     C::make_mut(&mut inner.elements)
     // }
 
-    fn update_tail_with_other_list(
-        &mut self,
-        // cur: &mut UnrolledList<T, C, S>,
-        mut other: UnrolledList<T, C, S>,
-    ) {
+    // Take a list that doesn't have a successor
+    // Update it to point to other if it doesn't have space, or move values into this
+    // one to fill up the capacity
+    fn update_tail_with_other_list(&mut self, mut other: UnrolledList<T, C, S>) {
         // This doesn't work unless
         debug_assert!(
             self.0.cdr.is_none(),
@@ -132,6 +152,32 @@ impl<
                 left_inner.cdr = Some(other);
             }
         }
+    }
+
+    // Figure out how in the heck you sort this
+    pub fn sort(&mut self)
+    where
+        T: Ord,
+    {
+        self.sort_by(Ord::cmp)
+    }
+
+    // Figure out how you sort this
+    pub fn sort_by<F>(&mut self, cmp: F)
+    where
+        F: Fn(&T, &T) -> Ordering,
+    {
+        todo!()
+    }
+
+    // Append single value
+    pub fn push_back(&mut self, value: T) {
+        todo!()
+    }
+
+    // Extend from an iterator over values
+    pub fn extend(&mut self, iter: impl Iterator<Item = T>) {
+        todo!()
     }
 
     // Will be O(m) where m = n / 64
