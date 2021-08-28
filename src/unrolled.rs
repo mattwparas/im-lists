@@ -44,6 +44,12 @@ impl<
         self.0.cdr()
     }
 
+    // pub fn cdr_ref(&mut self) -> Option<&mut UnrolledList<
+
+    // fn cdr_mut(&self) -> Option<&mut UnrolledCell<T, S, C>> {
+    //     self.0.cdr.map(|x| S::make_mut(&mut x))
+    // }
+
     fn elements(&self) -> &[T] {
         &self.0.elements
     }
@@ -88,12 +94,12 @@ impl<
         if index < CAPACITY {
             return self.0.elements.get(index).cloned();
         } else {
-            let mut cur = self.cdr();
+            let mut cur = self.0.next.clone();
             while let Some(node) = cur {
                 if index < CAPACITY {
                     return node.0.elements.get(index).cloned();
                 } else {
-                    cur = node.cdr();
+                    cur = node.0.next.clone();
                     index += CAPACITY;
                 }
             }
@@ -114,7 +120,7 @@ impl<
         // If we're at capacity, just set the pointer to the next one
         if self.at_capacity() {
             // println!("At capacity, point to next value");
-            S::make_mut(&mut self.0).cdr = Some(other);
+            S::make_mut(&mut self.0).next = Some(other);
         } else {
             let left_inner = S::make_mut(&mut self.0);
             let right_inner = S::make_mut(&mut other.0);
@@ -141,7 +147,7 @@ impl<
                 right_inner.index = 0;
 
                 // Update this node to now point to the right nodes tail
-                std::mem::swap(&mut left_inner.cdr, &mut right_inner.cdr);
+                std::mem::swap(&mut left_inner.next, &mut right_inner.next);
             } else {
                 // This is the case where there is still space in the left vector,
                 // but there are too many elements to move over in the right vector
@@ -170,18 +176,11 @@ impl<
                 left_inner.index = CAPACITY;
                 right_inner.index = right_vector.len();
 
-                // Coalesce to the right
+                // Coalesce to the right to merge anything in
                 other.coalesce_nodes();
 
                 // Update this to now point to the other node
-                left_inner.cdr = Some(other);
-
-                // left_inner.cdr.coalesce_nodes();
-
-                // TODO iteratively coalesce the remaining nodes in the list into one?
-                // Or just leave some nodes partially full
-
-                // coaleascing time - merge the nodes
+                left_inner.next = Some(other);
             }
         }
     }
@@ -189,18 +188,16 @@ impl<
     // See if we can coaleasce these nodes
     // Merge the values in - TODO use heuristics to do this rather than just promote blindly
     fn coalesce_nodes(&mut self) {
-        // println!("Coalescing nodes");
-
-        let mut cdr = self.cdr();
+        let mut cdr = self.0.next.clone();
 
         loop {
             if let Some(mut inner) = cdr {
                 let inner_mut = S::make_mut(&mut inner.0);
-                let other = inner_mut.cdr.take();
+                let other = inner_mut.next.take();
 
                 if let Some(other_inner) = other {
                     inner.append(other_inner);
-                    cdr = inner.cdr();
+                    cdr = inner.0.next.clone();
                 } else {
                     return;
                 }
@@ -240,9 +237,9 @@ impl<
     // Will be O(m) where m = n / 64
     // Not log(n) by any stretch, but for small list implementations, saves us some time
     pub fn append(&mut self, other: UnrolledList<T, C, S>) {
-        match self.0.cdr() {
+        match self.0.next.clone() {
             Some(mut cur) => {
-                while let Some(next) = cur.0.cdr() {
+                while let Some(next) = cur.0.next.clone() {
                     cur = next;
                 }
                 cur.update_tail_with_other_list(other);
@@ -278,7 +275,7 @@ pub struct UnrolledCell<
     // Consider wrapping the vec in either an Rc or Arc
     // Then on clone, do the whole copy on write nonsense
     pub elements: C::RC,
-    pub cdr: Option<UnrolledList<T, C, S>>,
+    pub next: Option<UnrolledList<T, C, S>>,
     pub full: bool,
 }
 
@@ -320,7 +317,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
         UnrolledCell {
             index: 0,
             elements: C::RC::new(Vec::new()),
-            cdr: None,
+            next: None,
             full: false,
         }
     }
@@ -337,7 +334,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
         if self.index < self.elements.len() {
             Some(UnrolledList(S::RC::new(self.advance_cursor())))
         } else {
-            self.cdr.clone()
+            self.next.clone()
         }
     }
 
@@ -345,7 +342,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
         UnrolledCell {
             index: self.index + 1,
             elements: self.elements.clone(),
-            cdr: self.cdr.clone(),
+            next: self.next.clone(),
             full: false,
         }
     }
@@ -360,7 +357,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
         UnrolledCell {
             index: 0,
             elements: C::RC::new(vec![value]),
-            cdr: None,
+            next: None,
             full: false,
         }
     }
@@ -370,7 +367,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
             UnrolledList(S::RC::new(UnrolledCell {
                 index: 1,
                 elements: C::RC::new(vec![value]),
-                cdr: Some(cdr),
+                next: Some(cdr),
                 full: false,
             }))
         } else {
@@ -386,7 +383,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
             UnrolledList(S::RC::new(UnrolledCell {
                 index: 1,
                 elements: C::RC::new(vec![value]),
-                cdr: Some(cdr),
+                next: Some(cdr),
                 full: false,
             }))
         } else {
@@ -417,7 +414,7 @@ impl<
     type Item = UnrolledList<T, C, S>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(_self) = &self.cur {
-            self.cur = _self.0.cdr.clone();
+            self.cur = _self.0.next.clone();
             return self.cur.clone();
         } else {
             None
@@ -445,7 +442,7 @@ impl<
     type Item = &'a UnrolledList<T, C, S>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(_self) = &self.cur {
-            self.cur = _self.0.cdr.as_ref();
+            self.cur = _self.0.next.as_ref();
             return self.cur;
         } else {
             None
@@ -479,7 +476,7 @@ impl<
                 self.index -= 1;
                 return_value
             } else {
-                self.cur = _self.0.cdr.as_ref();
+                self.cur = _self.0.next.as_ref();
                 self.index = self.cur.as_ref().map(|x| x.elements().len()).unwrap_or(0);
                 let ret = self.cur.as_ref().and_then(|x| x.0.car());
                 if ret.is_some() {
@@ -517,7 +514,7 @@ impl<
                 self.index -= 1;
                 return_value
             } else {
-                self.cur = _self.0.cdr.clone();
+                self.cur = _self.0.next.clone();
                 self.index = self.cur.as_ref().map(|x| x.elements().len()).unwrap_or(0);
                 let ret = self.cur.as_ref().and_then(|x| x.car());
                 if ret.is_some() {
@@ -588,7 +585,7 @@ impl<
                 UnrolledList(S::RC::new(UnrolledCell {
                     index: elements.len(),
                     elements: C::RC::new(elements),
-                    cdr: None,
+                    next: None,
                     full,
                 }))
             })
@@ -604,7 +601,7 @@ impl<
                 // todo!()
                 S::RC::get_mut(cell)
                     .expect("Only one owner allowed in construction")
-                    .cdr = Some(prev);
+                    .next = Some(prev);
             } else {
                 unreachable!()
             }
