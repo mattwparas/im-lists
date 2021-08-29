@@ -1,17 +1,4 @@
-use std::marker::PhantomData;
 use std::{ops::Deref, rc::Rc, sync::Arc};
-
-use std::fmt::Debug;
-
-// pub trait DummyClone {
-//     fn dummy_clone(&self) -> Self;
-// }
-
-// impl<T: Clone> DummyClone for T {
-//     fn dummy_clone(&self) -> Self {
-//         self.clone()
-//     }
-// }
 
 #[derive(Clone)]
 pub struct RcConstructor {}
@@ -26,17 +13,6 @@ impl<T> SmartPointerConstructor<T> for RcConstructor {
         (**ptr).clone()
     }
 
-    fn fmt(ptr: &Option<Self::RC>, f: &mut std::fmt::Formatter<'_>) -> Box<dyn std::fmt::Debug>
-    where
-        T: Debug,
-    {
-        // f.debug_tuple("").field(ptr).finish()
-        // unimplemented!()
-        // Box::new(ptr)
-
-        unimplemented!()
-    }
-
     fn make_mut(ptr: &mut Self::RC) -> &mut T
     where
         T: Clone,
@@ -44,12 +20,6 @@ impl<T> SmartPointerConstructor<T> for RcConstructor {
         Rc::make_mut(ptr)
     }
 }
-
-// impl std::fmt::Debug for RcConstructor {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.debug_struct("Rc").finish()
-//     }
-// }
 
 #[derive(Clone)]
 pub struct ArcConstructor {}
@@ -64,55 +34,13 @@ impl<T> SmartPointerConstructor<T> for ArcConstructor {
         (**ptr).clone()
     }
 
-    fn fmt(ptr: &Option<Self::RC>, f: &mut std::fmt::Formatter<'_>) -> Box<dyn std::fmt::Debug>
-    where
-        T: Debug,
-    {
-        unimplemented!()
-    }
-
     fn make_mut(ptr: &mut Self::RC) -> &mut T
     where
         T: Clone,
     {
-        todo!()
+        Arc::make_mut(ptr)
     }
 }
-
-// #[derive(Clone)]
-// pub struct BoxConstructor {}
-
-// impl<T: Clone> SmartPointerConstructor<T> for BoxConstructor {
-//     type RC = Box<T>;
-
-//     fn unwrap(ptr: &Self::RC) -> T
-//     where
-//         T: Clone,
-//     {
-//         (**ptr).clone()
-//     }
-
-//     fn fmt(ptr: &Option<Self::RC>, f: &mut std::fmt::Formatter<'_>) -> Box<dyn std::fmt::Debug>
-//     where
-//         T: Debug,
-//     {
-//         unimplemented!()
-//     }
-// }
-
-// #[derive(Clone)]
-// pub struct GcConstructor {}
-
-// impl<T: Clone + Debug> RefCountedConstructor<T> for GcConstructor {
-//     type RC = Gc<T>;
-
-//     fn unwrap(ptr: &Self::RC) -> T
-//     where
-//         T: Clone,
-//     {
-//         todo!()
-//     }
-// }
 
 // Definition and impls for RefCounted
 pub trait SmartPointer: Clone {
@@ -143,10 +71,6 @@ pub trait SmartPointerConstructor<T>: Clone {
     fn make_mut(ptr: &mut Self::RC) -> &mut T
     where
         T: Clone;
-
-    fn fmt(ptr: &Option<Self::RC>, f: &mut std::fmt::Formatter<'_>) -> Box<dyn std::fmt::Debug>
-    where
-        T: Debug;
 }
 
 // trait Clone
@@ -285,50 +209,3 @@ impl<T: Clone> SmartPointer for Box<T> {
         todo!()
     }
 }
-
-// #[derive(Clone)]
-// pub struct Gc<T>(Rc<T>);
-
-// impl<T: Clone + Debug> RefCounted for Gc<T> {
-//     type Target = T;
-
-//     fn new(obj: Self::Target) -> Self {
-//         todo!()
-//     }
-
-//     fn strong_count(this: &Self) -> usize {
-//         todo!()
-//     }
-
-//     fn unwrap(&self) -> Self::Target {
-//         todo!()
-//     }
-
-//     fn try_unwrap(this: Self) -> Option<Self::Target> {
-//         todo!()
-//     }
-
-//     fn get_mut(&mut self) -> Option<&mut Self::Target> {
-//         todo!()
-//     }
-
-//     fn make_mut(&mut self) -> &mut Self::Target {
-//         todo!()
-//     }
-
-//     fn ptr_eq(this: &Self, other: &Self) -> bool {
-//         todo!()
-//     }
-
-//     fn as_ptr(&self) -> *const Self::Target {
-//         todo!()
-//     }
-// }
-
-// impl<T> Deref for Gc<T> {
-//     type Target = T;
-
-//     fn deref(&self) -> &Self::Target {
-//         todo!()
-//     }
-// }

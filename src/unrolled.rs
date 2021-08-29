@@ -44,12 +44,6 @@ impl<
         self.0.cdr()
     }
 
-    // pub fn cdr_ref(&mut self) -> Option<&mut UnrolledList<
-
-    // fn cdr_mut(&self) -> Option<&mut UnrolledCell<T, S, C>> {
-    //     self.0.cdr.map(|x| S::make_mut(&mut x))
-    // }
-
     fn elements(&self) -> &[T] {
         &self.0.elements
     }
@@ -90,17 +84,20 @@ impl<
 
     // TODO document time complexity of this
     // Looks like its O(n / 64)
+    // TODO make this not so bad
     pub fn get(&self, mut index: usize) -> Option<T> {
         if index < CAPACITY {
-            return self.0.elements.get(index).cloned();
+            return self.0.elements.get(CAPACITY - index - 1).cloned();
         } else {
             let mut cur = self.0.next.as_ref();
+            index -= CAPACITY;
             while let Some(node) = cur {
-                if index < CAPACITY {
-                    return node.0.elements.get(index).cloned();
+                if index < node.0.index {
+                    let node_cap = node.0.index;
+                    return node.0.elements.get(node_cap - index - 1).cloned();
                 } else {
                     cur = node.0.next.as_ref();
-                    index += CAPACITY;
+                    index -= CAPACITY;
                 }
             }
 
@@ -277,32 +274,10 @@ pub struct UnrolledCell<
     C: SmartPointerConstructor<Vec<T>>,
 > {
     pub index: usize,
-    // Consider wrapping the vec in either an Rc or Arc
-    // Then on clone, do the whole copy on write nonsense
     pub elements: C::RC,
     pub next: Option<UnrolledList<T, C, S>>,
     pub full: bool,
 }
-
-// impl<T: Clone, S: SmartPointerConstructor<Self>> Deref for UnrolledCell<T, S> {
-//     type Target = [T];
-
-//     fn deref(&self) -> &Self::Target {
-//         todo!
-//     }
-// }
-
-// impl<T: Clone + std::fmt::Debug, S: RefCountedConstructor<Self>> std::fmt::Debug
-//     for UnrolledCell<T, S>
-// {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.debug_struct("UnrolledCell")
-//             .field("index", &self.index)
-//             .field("elements", &self.elements)
-//             // .field("cdr", &S::fmt(&self.cdr, f))
-//             .finish()
-//     }
-// }
 
 impl<
         T: Clone + std::fmt::Debug,
@@ -324,79 +299,6 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
             elements: C::RC::new(Vec::new()),
             next: None,
             full: false,
-        }
-    }
-
-    fn at_capacity(&self) -> bool {
-        self.full || self.elements.len() == CAPACITY
-    }
-
-    fn update_tail_with_other_list(&mut self, mut other: UnrolledList<T, C, S>) {
-        // If we're at capacity, just set the pointer to the next one
-        if self.at_capacity() {
-            // println!("At capacity, point to next value");
-            self.next = Some(other);
-        } else {
-            let left_inner = self;
-            let right_inner = S::make_mut(&mut other.0);
-
-            // TODO this could fail when the
-            let left_vector = C::make_mut(&mut left_inner.elements);
-            let right_vector = C::make_mut(&mut right_inner.elements);
-
-            // Fast path
-            // [1, 2, 3, 4, 5] + [6, 7, 8, 9, 10]
-            // internally, this is represented as:
-            // [5, 4, 3, 2, 1]  [10, 9, 8, 7, 6]
-            // iteration goes from back to front
-            // so it goes 1 -> 2 -> 3 -> 4 -> 5 ... 6 -> 7 -> 8 -> 9 -> 10
-            // So I need to take the vector from the right one [10, 9, 8, 7, 6]
-            // And append to that the left vector, replace it in the left one
-            if right_vector.len() + left_vector.len() < CAPACITY {
-                right_vector.append(left_vector);
-
-                // Swap the locations now after we've done the update
-                std::mem::swap(left_vector, right_vector);
-                // Adjust the indices accordingly
-                left_inner.index = left_vector.len();
-                right_inner.index = 0;
-
-                // Update this node to now point to the right nodes tail
-                std::mem::swap(&mut left_inner.next, &mut right_inner.next);
-            } else {
-                // This is the case where there is still space in the left vector,
-                // but there are too many elements to move over in the right vector
-                // With a capacity of 5:
-                // [1, 2, 3] + [4, 5, 6, 7, 8]
-                // We want the result to look like:
-                // [1, 2, 3, 4, 5] -> [6, 7, 8]
-                // Internally, this is represented as:
-                // [3, 2, 1] -> [8, 7, 6, 5, 4]
-                // And we would like the end result to be
-                // [5, 4, 3, 2, 1] -> [8, 7, 6]
-                // One way we could accomplish this is to
-                // pop off [5, 4] as a vector
-                // append [3, 2, 1] to it
-                // and then assign it to the left value
-
-                // Find how many spots are remaining in the left vector
-                let space_remaining = CAPACITY - left_vector.len();
-                // Chop off what will now be the start of our left vector
-                let mut new_tail = right_vector.split_off(right_vector.len() - space_remaining);
-                // Rearrange accordingly
-                new_tail.append(left_vector);
-                // Make the left node point to the correct spot
-                std::mem::swap(left_vector, &mut new_tail);
-
-                left_inner.index = CAPACITY;
-                right_inner.index = right_vector.len();
-
-                // Coalesce to the right to merge anything in
-                other.coalesce_nodes();
-
-                // Update this to now point to the other node
-                left_inner.next = Some(other);
-            }
         }
     }
 
@@ -520,8 +422,9 @@ impl<
     type Item = &'a UnrolledList<T, C, S>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(_self) = &self.cur {
+            let ret_val = self.cur;
             self.cur = _self.0.next.as_ref();
-            return self.cur;
+            return ret_val;
         } else {
             None
         }
@@ -823,5 +726,22 @@ mod iterator_tests {
         left.assert_list_invariants();
 
         println!("{:?}", left);
+    }
+
+    #[test]
+    fn length() {
+        let list: RcList<_> = (0..300).into_iter().collect();
+        assert_eq!(list.len(), 300);
+
+        println!("list: {:?}", list);
+    }
+
+    #[test]
+    fn indexing() {
+        let list: RcList<_> = (0..300).into_iter().collect();
+
+        for i in 0..300 {
+            assert_eq!(list.get(i).unwrap(), i);
+        }
     }
 }

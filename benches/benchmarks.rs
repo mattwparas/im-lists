@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use lists::list::{ArcLinkedList, RcLinkedList};
-use lists::unrolled::{ArcList, RcList};
+use im_lists::list::{ArcLinkedList, RcLinkedList};
+use im_lists::unrolled::{ArcList, RcList};
 
 use im_rc::Vector;
 
