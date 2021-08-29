@@ -128,6 +128,9 @@ impl<
             let left_vector = C::make_mut(&mut left_inner.elements);
             let right_vector = C::make_mut(&mut right_inner.elements);
 
+            println!("left vector length start: {}", left_vector.len());
+            println!("right vector length start: {}", right_vector.len());
+
             // Fast path
             // [1, 2, 3, 4, 5] + [6, 7, 8, 9, 10]
             // internally, this is represented as:
@@ -148,6 +151,8 @@ impl<
                 // Update this node to now point to the right nodes tail
                 std::mem::swap(&mut left_inner.next, &mut right_inner.next);
             } else {
+                println!("Coalescing");
+
                 // This is the case where there is still space in the left vector,
                 // but there are too many elements to move over in the right vector
                 // With a capacity of 5:
@@ -175,36 +180,123 @@ impl<
                 left_inner.index = CAPACITY;
                 right_inner.index = right_vector.len();
 
+                println!("right vector length: {}", right_vector.len());
+                println!("length before coalescing: {}", other.elements().len());
+
                 // Coalesce to the right to merge anything in
                 other.coalesce_nodes();
 
+                println!("length after: {}", other.elements().len());
+
                 // Update this to now point to the other node
                 left_inner.next = Some(other);
+
+                // self.0 = left_inner;
+            }
+        }
+
+        // println!(
+        //     "next length after {}",
+        //     self.0.next.as_ref().unwrap().elements().len()
+        // );
+    }
+
+    // Fill the node to the right into the self
+    fn merge_node_with_neighbor(&mut self) -> bool {
+        // If we're at capacity merging will do nothing, bail
+        if self.at_capacity() {
+            return false;
+        }
+
+        // Can't merge with neighbor that doesn't have anything
+        if self.0.next.is_none() {
+            return false;
+        }
+
+        let mut other = self.0.next.clone().unwrap();
+
+        let left_inner = S::make_mut(&mut self.0);
+        let right_inner = S::make_mut(&mut other.0);
+
+        // let right_cell = S::make_mut(&mut left_cell.next.unwrap().0);
+
+        let left_vector = C::make_mut(&mut left_inner.elements);
+        let right_vector = C::make_mut(&mut right_inner.elements);
+
+        if right_vector.len() + left_vector.len() < CAPACITY {
+            right_vector.append(left_vector);
+
+            // Swap the locations now after we've done the update
+            std::mem::swap(left_vector, right_vector);
+            // Adjust the indices accordingly
+            left_inner.index = left_vector.len();
+            right_inner.index = 0;
+
+            // Update this node to now point to the right nodes tail
+            std::mem::swap(&mut left_inner.next, &mut right_inner.next);
+        } else {
+            // Find how many spots are remaining in the left vector
+            let space_remaining = CAPACITY - left_vector.len();
+            // Chop off what will now be the start of our left vector
+            let mut new_tail = right_vector.split_off(right_vector.len() - space_remaining);
+            // Rearrange accordingly
+            new_tail.append(left_vector);
+            // Make the left node point to the correct spot
+            std::mem::swap(left_vector, &mut new_tail);
+
+            left_inner.index = CAPACITY;
+            right_inner.index = right_vector.len();
+
+            // Update this to now point to the other node
+            left_inner.next = Some(other);
+        }
+
+        println!("Merging!");
+
+        true
+    }
+
+    fn coalesce_nodes(&mut self) {
+        if !self.merge_node_with_neighbor() {
+            return;
+        }
+
+        let mut cur = self.0.next.clone();
+
+        loop {
+            if let Some(mut inner) = cur {
+                if !inner.merge_node_with_neighbor() {
+                    return;
+                }
+                cur = inner.0.next.clone();
             }
         }
     }
 
     // See if we can coaleasce these nodes
     // Merge the values in - TODO use heuristics to do this rather than just promote blindly
-    fn coalesce_nodes(&mut self) {
-        let mut cdr = self.0.next.clone();
+    // fn coalesce_nodes(&mut self) {
+    //     let mut cdr = self.0.next.clone();
 
-        loop {
-            if let Some(mut inner) = cdr {
-                let inner_mut = S::make_mut(&mut inner.0);
-                let other = inner_mut.next.take();
+    //     loop {
+    //         if let Some(mut inner) = cdr {
+    //             let inner_mut = S::make_mut(&mut inner.0);
+    //             let other = inner_mut.next.take();
 
-                if let Some(other_inner) = other {
-                    inner.append(other_inner);
-                    cdr = inner.0.next.clone();
-                } else {
-                    return;
-                }
-            } else {
-                return;
-            }
-        }
-    }
+    //             if let Some(other_inner) = other {
+    //                 // TODO
+    //                 unimplemented!();
+    //                 inner.update_tail_with_other_list(other_inner);
+    //                 // inner_mut.next = Some(inner);
+    //                 cdr = inner.0.next.clone();
+    //             } else {
+    //                 return;
+    //             }
+    //         } else {
+    //             return;
+    //         }
+    //     }
+    // }
 
     // Figure out how in the heck you sort this
     pub fn sort(&mut self)
@@ -244,10 +336,12 @@ impl<
         // TODO
         let mut last = self.node_iter().last().expect("Missing node").clone();
 
-        // println!(
-        //     "Strong count of vector: {}",
-        //     C::RC::strong_count(&last.0.elements)
-        // );
+        println!(
+            "In append, found last node with elements: {}",
+            last.elements().len()
+        );
+
+        println!("Other list has elements: {}", other.len());
 
         last.update_tail_with_other_list(other);
     }
@@ -579,7 +673,6 @@ impl<
             let prev = pairs.pop().unwrap();
 
             if let Some(UnrolledList(cell)) = pairs.get_mut(i) {
-                // todo!()
                 S::RC::get_mut(cell)
                     .expect("Only one owner allowed in construction")
                     .next = Some(prev);
@@ -718,9 +811,18 @@ mod iterator_tests {
     // Profile to make sure
     #[test]
     fn node_appending_coalescing_works() {
+        // 356
+        // 256 + 100
         let mut left: RcList<_> = (0..CAPACITY + 100).into_iter().collect();
-        let right: RcList<_> = (CAPACITY + 100..CAPACITY + 200).into_iter().collect();
 
+        for node in left.node_iter() {
+            println!("elements in node: {:?}", node.elements());
+        }
+
+        // 400
+        let right: RcList<_> = (CAPACITY + 100..CAPACITY + 500).into_iter().collect();
+
+        println!("{:?}", right);
         left.append(right);
 
         left.assert_list_invariants();
