@@ -115,163 +115,190 @@ impl<
     // one to fill up the capacity
 
     // TODO move this to the cell lever
-    fn update_tail_with_other_list(&mut self, mut other: UnrolledList<T, C, S>) {
-        // If we're at capacity, just set the pointer to the next one
-        if self.at_capacity() {
-            // println!("At capacity, point to next value");
-            S::make_mut(&mut self.0).next = Some(other);
-        } else {
-            let left_inner = S::make_mut(&mut self.0);
-            let right_inner = S::make_mut(&mut other.0);
+    // fn update_tail_with_other_list(&mut self, mut other: UnrolledList<T, C, S>) {
+    //     println!("update tail with other list");
 
-            // TODO this could fail when the
-            let left_vector = C::make_mut(&mut left_inner.elements);
-            let right_vector = C::make_mut(&mut right_inner.elements);
+    //     // If we're at capacity, just set the pointer to the next one
+    //     if self.at_capacity() {
+    //         // println!("At capacity, point to next value");
+    //         S::make_mut(&mut self.0).next = Some(other);
+    //     } else {
+    //         let left_inner = S::make_mut(&mut self.0);
+    //         let right_inner = S::make_mut(&mut other.0);
 
-            println!("left vector length start: {}", left_vector.len());
-            println!("right vector length start: {}", right_vector.len());
+    //         // TODO this could fail when the
+    //         let left_vector = C::make_mut(&mut left_inner.elements);
+    //         let right_vector = C::make_mut(&mut right_inner.elements);
 
-            // Fast path
-            // [1, 2, 3, 4, 5] + [6, 7, 8, 9, 10]
-            // internally, this is represented as:
-            // [5, 4, 3, 2, 1]  [10, 9, 8, 7, 6]
-            // iteration goes from back to front
-            // so it goes 1 -> 2 -> 3 -> 4 -> 5 ... 6 -> 7 -> 8 -> 9 -> 10
-            // So I need to take the vector from the right one [10, 9, 8, 7, 6]
-            // And append to that the left vector, replace it in the left one
-            if right_vector.len() + left_vector.len() < CAPACITY {
-                right_vector.append(left_vector);
+    //         println!("left vector length start: {}", left_vector.len());
+    //         println!("right vector length start: {}", right_vector.len());
 
-                // Swap the locations now after we've done the update
-                std::mem::swap(left_vector, right_vector);
-                // Adjust the indices accordingly
-                left_inner.index = left_vector.len();
-                right_inner.index = 0;
+    //         // Fast path
+    //         // [1, 2, 3, 4, 5] + [6, 7, 8, 9, 10]
+    //         // internally, this is represented as:
+    //         // [5, 4, 3, 2, 1]  [10, 9, 8, 7, 6]
+    //         // iteration goes from back to front
+    //         // so it goes 1 -> 2 -> 3 -> 4 -> 5 ... 6 -> 7 -> 8 -> 9 -> 10
+    //         // So I need to take the vector from the right one [10, 9, 8, 7, 6]
+    //         // And append to that the left vector, replace it in the left one
+    //         if right_vector.len() + left_vector.len() < CAPACITY {
+    //             right_vector.append(left_vector);
 
-                // Update this node to now point to the right nodes tail
-                std::mem::swap(&mut left_inner.next, &mut right_inner.next);
-            } else {
-                println!("Coalescing");
+    //             // Swap the locations now after we've done the update
+    //             std::mem::swap(left_vector, right_vector);
+    //             // Adjust the indices accordingly
+    //             left_inner.index = left_vector.len();
+    //             right_inner.index = 0;
 
-                // This is the case where there is still space in the left vector,
-                // but there are too many elements to move over in the right vector
-                // With a capacity of 5:
-                // [1, 2, 3] + [4, 5, 6, 7, 8]
-                // We want the result to look like:
-                // [1, 2, 3, 4, 5] -> [6, 7, 8]
-                // Internally, this is represented as:
-                // [3, 2, 1] -> [8, 7, 6, 5, 4]
-                // And we would like the end result to be
-                // [5, 4, 3, 2, 1] -> [8, 7, 6]
-                // One way we could accomplish this is to
-                // pop off [5, 4] as a vector
-                // append [3, 2, 1] to it
-                // and then assign it to the left value
+    //             // Update this node to now point to the right nodes tail
+    //             std::mem::swap(&mut left_inner.next, &mut right_inner.next);
+    //         } else {
+    //             left_inner.next = Some(other);
+    //             return;
 
-                // Find how many spots are remaining in the left vector
-                let space_remaining = CAPACITY - left_vector.len();
-                // Chop off what will now be the start of our left vector
-                let mut new_tail = right_vector.split_off(right_vector.len() - space_remaining);
-                // Rearrange accordingly
-                new_tail.append(left_vector);
-                // Make the left node point to the correct spot
-                std::mem::swap(left_vector, &mut new_tail);
+    //             println!("Coalescing");
 
-                left_inner.index = CAPACITY;
-                right_inner.index = right_vector.len();
+    //             // This is the case where there is still space in the left vector,
+    //             // but there are too many elements to move over in the right vector
+    //             // With a capacity of 5:
+    //             // [1, 2, 3] + [4, 5, 6, 7, 8]
+    //             // We want the result to look like:
+    //             // [1, 2, 3, 4, 5] -> [6, 7, 8]
+    //             // Internally, this is represented as:
+    //             // [3, 2, 1] -> [8, 7, 6, 5, 4]
+    //             // And we would like the end result to be
+    //             // [5, 4, 3, 2, 1] -> [8, 7, 6]
+    //             // One way we could accomplish this is to
+    //             // pop off [5, 4] as a vector
+    //             // append [3, 2, 1] to it
+    //             // and then assign it to the left value
 
-                println!("right vector length: {}", right_vector.len());
-                println!("length before coalescing: {}", other.elements().len());
+    //             // Find how many spots are remaining in the left vector
+    //             let space_remaining = CAPACITY - left_vector.len();
+    //             // Chop off what will now be the start of our left vector
+    //             let mut new_tail = right_vector.split_off(right_vector.len() - space_remaining);
+    //             // Rearrange accordingly
+    //             new_tail.append(left_vector);
+    //             // Make the left node point to the correct spot
+    //             std::mem::swap(left_vector, &mut new_tail);
 
-                // Coalesce to the right to merge anything in
-                other.coalesce_nodes();
+    //             left_inner.index = CAPACITY;
+    //             right_inner.index = right_vector.len();
 
-                println!("length after: {}", other.elements().len());
+    //             // Set the right to no longer be full
+    //             right_inner.full = right_vector.len() == CAPACITY;
 
-                // Update this to now point to the other node
-                left_inner.next = Some(other);
+    //             println!("right vector length: {}", right_vector.len());
+    //             println!("length before coalescing: {}", other.elements().len());
 
-                // self.0 = left_inner;
-            }
-        }
+    //             // Coalesce to the right to merge anything in
+    //             other.coalesce_nodes();
 
-        // println!(
-        //     "next length after {}",
-        //     self.0.next.as_ref().unwrap().elements().len()
-        // );
+    //             println!("length after: {}", other.elements().len());
+
+    //             // Update this to now point to the other node
+    //             left_inner.next = Some(other);
+
+    //             // self.0 = left_inner;
+    //         }
+    //     }
+
+    //     // println!(
+    //     //     "next length after {}",
+    //     //     self.0.next.as_ref().unwrap().elements().len()
+    //     // );
+    // }
+
+    pub fn append(self, other: Self) -> Self {
+        self.node_iter()
+            .into_iter()
+            .chain(other.node_iter())
+            .collect()
     }
 
     // Fill the node to the right into the self
-    fn merge_node_with_neighbor(&mut self) -> bool {
-        // If we're at capacity merging will do nothing, bail
-        if self.at_capacity() {
-            return false;
-        }
+    // fn merge_node_with_neighbor(&mut self) -> bool {
+    //     // If we're at capacity merging will do nothing, bail
+    //     if self.at_capacity() {
+    //         println!("Node at capacity");
+    //         println!("Node full: {}", self.0.full);
+    //         println!("Node size: {}", self.0.elements.len());
+    //         return false;
+    //     }
 
-        // Can't merge with neighbor that doesn't have anything
-        if self.0.next.is_none() {
-            return false;
-        }
+    //     // Can't merge with neighbor that doesn't have anything
+    //     if self.0.next.is_none() {
+    //         println!("Missing neighbor");
+    //         return false;
+    //     }
 
-        let mut other = self.0.next.clone().unwrap();
+    //     let mut other = self.0.next.clone().unwrap();
 
-        let left_inner = S::make_mut(&mut self.0);
-        let right_inner = S::make_mut(&mut other.0);
+    //     let left_inner = S::make_mut(&mut self.0);
+    //     let right_inner = S::make_mut(&mut other.0);
 
-        // let right_cell = S::make_mut(&mut left_cell.next.unwrap().0);
+    //     // let right_cell = S::make_mut(&mut left_cell.next.unwrap().0);
 
-        let left_vector = C::make_mut(&mut left_inner.elements);
-        let right_vector = C::make_mut(&mut right_inner.elements);
+    //     let left_vector = C::make_mut(&mut left_inner.elements);
+    //     let right_vector = C::make_mut(&mut right_inner.elements);
 
-        if right_vector.len() + left_vector.len() < CAPACITY {
-            right_vector.append(left_vector);
+    //     if right_vector.len() + left_vector.len() < CAPACITY {
+    //         right_vector.append(left_vector);
 
-            // Swap the locations now after we've done the update
-            std::mem::swap(left_vector, right_vector);
-            // Adjust the indices accordingly
-            left_inner.index = left_vector.len();
-            right_inner.index = 0;
+    //         // Swap the locations now after we've done the update
+    //         std::mem::swap(left_vector, right_vector);
+    //         // Adjust the indices accordingly
+    //         left_inner.index = left_vector.len();
+    //         right_inner.index = 0;
 
-            // Update this node to now point to the right nodes tail
-            std::mem::swap(&mut left_inner.next, &mut right_inner.next);
-        } else {
-            // Find how many spots are remaining in the left vector
-            let space_remaining = CAPACITY - left_vector.len();
-            // Chop off what will now be the start of our left vector
-            let mut new_tail = right_vector.split_off(right_vector.len() - space_remaining);
-            // Rearrange accordingly
-            new_tail.append(left_vector);
-            // Make the left node point to the correct spot
-            std::mem::swap(left_vector, &mut new_tail);
+    //         // Update this node to now point to the right nodes tail
+    //         std::mem::swap(&mut left_inner.next, &mut right_inner.next);
+    //     } else {
+    //         // Find how many spots are remaining in the left vector
+    //         let space_remaining = CAPACITY - left_vector.len();
+    //         // Chop off what will now be the start of our left vector
+    //         let mut new_tail = right_vector.split_off(right_vector.len() - space_remaining);
+    //         // Rearrange accordingly
+    //         new_tail.append(left_vector);
+    //         // Make the left node point to the correct spot
+    //         std::mem::swap(left_vector, &mut new_tail);
 
-            left_inner.index = CAPACITY;
-            right_inner.index = right_vector.len();
+    //         left_inner.index = CAPACITY;
+    //         right_inner.index = right_vector.len();
 
-            // Update this to now point to the other node
-            left_inner.next = Some(other);
-        }
+    //         right_inner.full = right_vector.len() == CAPACITY;
 
-        println!("Merging!");
+    //         // Update this to now point to the other node
+    //         left_inner.next = Some(other);
+    //     }
 
-        true
-    }
+    //     println!("Merging!");
 
-    fn coalesce_nodes(&mut self) {
-        if !self.merge_node_with_neighbor() {
-            return;
-        }
+    //     true
+    // }
 
-        let mut cur = self.0.next.clone();
+    // fn coalesce_nodes(&mut self) {
+    //     if !self.merge_node_with_neighbor() {
+    //         println!("Early return in coalesce nodes");
+    //         return;
+    //     }
 
-        loop {
-            if let Some(mut inner) = cur {
-                if !inner.merge_node_with_neighbor() {
-                    return;
-                }
-                cur = inner.0.next.clone();
-            }
-        }
-    }
+    //     let mut cur = self.0.next.clone();
+
+    //     loop {
+    //         if let Some(mut inner) = cur {
+    //             // println!("Looping")
+    //             if !inner.merge_node_with_neighbor() {
+    //                 println!("done coalescing");
+    //                 return;
+    //             }
+    //             cur = inner.0.next.clone();
+    //         } else {
+    //             println!("Hit the end, done coalescing");
+    //             return;
+    //         }
+    //     }
+    // }
 
     // See if we can coaleasce these nodes
     // Merge the values in - TODO use heuristics to do this rather than just promote blindly
@@ -321,30 +348,33 @@ impl<
 
     // Extend from an iterator over values
     // TODO optimize this otherwise
-    pub fn extend(&mut self, iter: impl IntoIterator<Item = T>) {
-        self.append(iter.into_iter().collect());
+    pub fn extend(self, iter: impl IntoIterator<Item = T>) -> Self {
+        self.append(iter.into_iter().collect())
     }
 
     // Will be O(m) where m = n / 64
     // Not log(n) by any stretch, but for small list implementations, saves us some time
-    pub fn append(&mut self, other: UnrolledList<T, C, S>) {
-        if self.0.next.is_none() {
-            self.update_tail_with_other_list(other);
-            return;
-        }
+    // TODO this is not working the way I would like it to
+    // pub fn append(&mut self, other: UnrolledList<T, C, S>) {
+    //     if self.0.next.is_none() {
+    //         self.update_tail_with_other_list(other);
+    //         return;
+    //     }
 
-        // TODO
-        let mut last = self.node_iter().last().expect("Missing node").clone();
+    //     // TODO
+    //     let mut last = self.node_iter().last().expect("Missing node").clone();
 
-        println!(
-            "In append, found last node with elements: {}",
-            last.elements().len()
-        );
+    //     println!(
+    //         "In append, found last node with elements: {}",
+    //         last.elements().len()
+    //     );
 
-        println!("Other list has elements: {}", other.len());
+    //     println!("Other list has elements: {}", other.len());
 
-        last.update_tail_with_other_list(other);
-    }
+    //     last.update_tail_with_other_list(other);
+
+    //     println!("Length of list after: {}", self.len());
+    // }
 
     pub fn is_empty(&self) -> bool {
         self.0.elements.is_empty()
@@ -685,6 +715,80 @@ impl<
     }
 }
 
+impl<
+        'a,
+        T: 'a + Clone,
+        C: 'a + SmartPointerConstructor<Vec<T>>,
+        S: 'a + SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > FromIterator<&'a UnrolledList<T, C, S>> for UnrolledList<T, C, S>
+{
+    fn from_iter<I: IntoIterator<Item = &'a UnrolledList<T, C, S>>>(iter: I) -> Self {
+        // Links up the nodes
+        let mut nodes: Vec<_> = iter.into_iter().cloned().collect();
+
+        let mut rev_iter = (0..nodes.len()).into_iter().rev();
+        rev_iter.next();
+
+        for i in rev_iter {
+            let mut prev = nodes.pop().unwrap();
+
+            if let Some(UnrolledList(cell)) = nodes.get_mut(i) {
+                // Check if this node can fit entirely into the previous one
+                if cell.elements.len() + prev.0.elements.len() < CAPACITY {
+                    let left_inner = S::make_mut(cell);
+                    let right_inner = S::make_mut(&mut prev.0);
+
+                    let left_vector = C::make_mut(&mut left_inner.elements);
+                    let right_vector = C::make_mut(&mut right_inner.elements);
+
+                    // Perform the actual move of the values
+                    right_vector.append(left_vector);
+
+                    // Swap the locations now after we've done the update
+                    std::mem::swap(left_vector, right_vector);
+                    // Adjust the indices accordingly
+                    left_inner.index = left_vector.len();
+                    right_inner.index = 0;
+
+                    // Update this node to now point to the right nodes tail
+                    std::mem::swap(&mut left_inner.next, &mut right_inner.next);
+                } else {
+                    S::make_mut(cell).next = Some(prev);
+                }
+            } else {
+                unreachable!()
+            }
+        }
+
+        nodes.pop().unwrap()
+    }
+
+    // fn from_iter<I: IntoIterator<Item = &'a UnrolledList<T, C, S>>>(iter: I) -> Self {}
+    // fn from_iter<I: IntoIterator<Item = UnrolledList<T, C, S>>>(iter: I) -> Self {
+    // // unimplemented!()
+
+    // // Links up the nodes
+    // let mut nodes: Vec<_> = iter.into_iter().collect();
+
+    // let mut rev_iter = (0..nodes.len()).into_iter().rev();
+    // rev_iter.next();
+
+    // for i in rev_iter {
+    //     let prev = nodes.pop().unwrap();
+
+    //     if let Some(UnrolledList(cell)) = nodes.get_mut(i) {
+    //         S::make_mut(cell).next = Some(prev);
+    //     } else {
+    //         unreachable!()
+    //     }
+    // }
+
+    // nodes.pop().unwrap();
+
+    // unimplemented!()
+    // }
+}
+
 pub type RcList<T> = UnrolledList<T, RcConstructor, RcConstructor>;
 pub type ArcList<T> = UnrolledList<T, ArcConstructor, ArcConstructor>;
 
@@ -736,7 +840,7 @@ mod tests {
     fn append() {
         let mut left: RcList<_> = vec![1, 2, 3, 4, 5].into_iter().collect();
         let right: RcList<_> = vec![6, 7, 8, 9, 10].into_iter().collect();
-        left.append(right.clone());
+        left = left.append(right.clone());
 
         for item in left {
             println!("Iterating: {}", item);
@@ -752,7 +856,7 @@ mod tests {
         let mut left: RcList<_> = (0..60).into_iter().collect();
         let right: RcList<_> = (60..100).into_iter().collect();
 
-        left.append(right);
+        left = left.append(right);
 
         left.assert_invariants();
 
@@ -815,17 +919,28 @@ mod iterator_tests {
         // 256 + 100
         let mut left: RcList<_> = (0..CAPACITY + 100).into_iter().collect();
 
-        for node in left.node_iter() {
-            println!("elements in node: {:?}", node.elements());
-        }
+        // for node in left.node_iter() {
+        //     println!("elements in node: {:?}", node.elements());
+        // }
 
         // 400
         let right: RcList<_> = (CAPACITY + 100..CAPACITY + 500).into_iter().collect();
 
-        println!("{:?}", right);
-        left.append(right);
+        // println!("{:?}", right);
+        left = left.append(right);
+
+        // let new = left
+        //     .node_iter()
+        //     .into_iter()
+        //     .chain(right.node_iter())
+        //     .collect::<RcList<usize>>();
+
+        // println!("new list: {:?}", new);
+        // println!("new list length: {:?}", new.len());
 
         left.assert_list_invariants();
+
+        println!("length: {}", left.len());
 
         println!("{:?}", left);
     }
