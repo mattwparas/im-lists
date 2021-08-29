@@ -94,12 +94,12 @@ impl<
         if index < CAPACITY {
             return self.0.elements.get(index).cloned();
         } else {
-            let mut cur = self.0.next.clone();
+            let mut cur = self.0.next.as_ref();
             while let Some(node) = cur {
                 if index < CAPACITY {
                     return node.0.elements.get(index).cloned();
                 } else {
-                    cur = node.0.next.clone();
+                    cur = node.0.next.as_ref();
                     index += CAPACITY;
                 }
             }
@@ -116,6 +116,8 @@ impl<
     // Take a list that doesn't have a successor
     // Update it to point to other if it doesn't have space, or move values into this
     // one to fill up the capacity
+
+    // TODO move this to the cell lever
     fn update_tail_with_other_list(&mut self, mut other: UnrolledList<T, C, S>) {
         // If we're at capacity, just set the pointer to the next one
         if self.at_capacity() {
@@ -237,17 +239,20 @@ impl<
     // Will be O(m) where m = n / 64
     // Not log(n) by any stretch, but for small list implementations, saves us some time
     pub fn append(&mut self, other: UnrolledList<T, C, S>) {
-        match self.0.next.clone() {
-            Some(mut cur) => {
-                while let Some(next) = cur.0.next.clone() {
-                    cur = next;
-                }
-                cur.update_tail_with_other_list(other);
-            }
-            None => {
-                self.update_tail_with_other_list(other);
-            }
+        if self.0.next.is_none() {
+            self.update_tail_with_other_list(other);
+            return;
         }
+
+        // TODO
+        let mut last = self.node_iter().last().expect("Missing node").clone();
+
+        // println!(
+        //     "Strong count of vector: {}",
+        //     C::RC::strong_count(&last.0.elements)
+        // );
+
+        last.update_tail_with_other_list(other);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -319,6 +324,79 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
             elements: C::RC::new(Vec::new()),
             next: None,
             full: false,
+        }
+    }
+
+    fn at_capacity(&self) -> bool {
+        self.full || self.elements.len() == CAPACITY
+    }
+
+    fn update_tail_with_other_list(&mut self, mut other: UnrolledList<T, C, S>) {
+        // If we're at capacity, just set the pointer to the next one
+        if self.at_capacity() {
+            // println!("At capacity, point to next value");
+            self.next = Some(other);
+        } else {
+            let left_inner = self;
+            let right_inner = S::make_mut(&mut other.0);
+
+            // TODO this could fail when the
+            let left_vector = C::make_mut(&mut left_inner.elements);
+            let right_vector = C::make_mut(&mut right_inner.elements);
+
+            // Fast path
+            // [1, 2, 3, 4, 5] + [6, 7, 8, 9, 10]
+            // internally, this is represented as:
+            // [5, 4, 3, 2, 1]  [10, 9, 8, 7, 6]
+            // iteration goes from back to front
+            // so it goes 1 -> 2 -> 3 -> 4 -> 5 ... 6 -> 7 -> 8 -> 9 -> 10
+            // So I need to take the vector from the right one [10, 9, 8, 7, 6]
+            // And append to that the left vector, replace it in the left one
+            if right_vector.len() + left_vector.len() < CAPACITY {
+                right_vector.append(left_vector);
+
+                // Swap the locations now after we've done the update
+                std::mem::swap(left_vector, right_vector);
+                // Adjust the indices accordingly
+                left_inner.index = left_vector.len();
+                right_inner.index = 0;
+
+                // Update this node to now point to the right nodes tail
+                std::mem::swap(&mut left_inner.next, &mut right_inner.next);
+            } else {
+                // This is the case where there is still space in the left vector,
+                // but there are too many elements to move over in the right vector
+                // With a capacity of 5:
+                // [1, 2, 3] + [4, 5, 6, 7, 8]
+                // We want the result to look like:
+                // [1, 2, 3, 4, 5] -> [6, 7, 8]
+                // Internally, this is represented as:
+                // [3, 2, 1] -> [8, 7, 6, 5, 4]
+                // And we would like the end result to be
+                // [5, 4, 3, 2, 1] -> [8, 7, 6]
+                // One way we could accomplish this is to
+                // pop off [5, 4] as a vector
+                // append [3, 2, 1] to it
+                // and then assign it to the left value
+
+                // Find how many spots are remaining in the left vector
+                let space_remaining = CAPACITY - left_vector.len();
+                // Chop off what will now be the start of our left vector
+                let mut new_tail = right_vector.split_off(right_vector.len() - space_remaining);
+                // Rearrange accordingly
+                new_tail.append(left_vector);
+                // Make the left node point to the correct spot
+                std::mem::swap(left_vector, &mut new_tail);
+
+                left_inner.index = CAPACITY;
+                right_inner.index = right_vector.len();
+
+                // Coalesce to the right to merge anything in
+                other.coalesce_nodes();
+
+                // Update this to now point to the other node
+                left_inner.next = Some(other);
+            }
         }
     }
 
@@ -737,8 +815,8 @@ mod iterator_tests {
     // Profile to make sure
     #[test]
     fn node_appending_coalescing_works() {
-        let mut left: RcList<_> = (0..100).into_iter().collect();
-        let right: RcList<_> = (100..200).into_iter().collect();
+        let mut left: RcList<_> = (0..CAPACITY + 100).into_iter().collect();
+        let right: RcList<_> = (CAPACITY + 100..CAPACITY + 200).into_iter().collect();
 
         left.append(right);
 
