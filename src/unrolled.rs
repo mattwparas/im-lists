@@ -68,6 +68,13 @@ impl<
         }
     }
 
+    fn into_node_iter(self) -> NodeIter<T, C, S> {
+        NodeIter {
+            cur: Some(self),
+            _inner: PhantomData,
+        }
+    }
+
     fn node_iter<'a>(&'a self) -> NodeIterRef<'a, T, C, S> {
         NodeIterRef {
             cur: Some(self),
@@ -84,20 +91,20 @@ impl<
 
     // TODO document time complexity of this
     // Looks like its O(n / 64)
-    // TODO make this not so bad
+    // TODO make this not so bad - also how it works with half full nodes
     pub fn get(&self, mut index: usize) -> Option<T> {
         if index < CAPACITY {
             return self.0.elements.get(CAPACITY - index - 1).cloned();
         } else {
             let mut cur = self.0.next.as_ref();
-            index -= CAPACITY;
+            index -= self.0.elements.len();
             while let Some(node) = cur {
                 if index < node.0.index {
                     let node_cap = node.0.index;
                     return node.0.elements.get(node_cap - index - 1).cloned();
                 } else {
                     cur = node.0.next.as_ref();
-                    index -= CAPACITY;
+                    index -= node.0.elements.len();
                 }
             }
 
@@ -210,9 +217,9 @@ impl<
     // }
 
     pub fn append(self, other: Self) -> Self {
-        self.node_iter()
+        self.into_node_iter()
             .into_iter()
-            .chain(other.node_iter())
+            .chain(other.into_node_iter())
             .collect()
     }
 
@@ -518,8 +525,11 @@ impl<
     type Item = UnrolledList<T, C, S>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(_self) = &self.cur {
+            // std::mem::replace(&mut self.cur, _self.0.next.clone())
+
+            let ret_val = self.cur.clone();
             self.cur = _self.0.next.clone();
-            return self.cur.clone();
+            return ret_val;
         } else {
             None
         }
@@ -716,15 +726,16 @@ impl<
 }
 
 impl<
-        'a,
-        T: 'a + Clone,
-        C: 'a + SmartPointerConstructor<Vec<T>>,
-        S: 'a + SmartPointerConstructor<UnrolledCell<T, S, C>>,
-    > FromIterator<&'a UnrolledList<T, C, S>> for UnrolledList<T, C, S>
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > FromIterator<UnrolledList<T, C, S>> for UnrolledList<T, C, S>
 {
-    fn from_iter<I: IntoIterator<Item = &'a UnrolledList<T, C, S>>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = UnrolledList<T, C, S>>>(iter: I) -> Self {
         // Links up the nodes
-        let mut nodes: Vec<_> = iter.into_iter().cloned().collect();
+        let mut nodes: Vec<_> = iter.into_iter().collect();
+
+        println!("nodes length: {}", nodes.len());
 
         let mut rev_iter = (0..nodes.len()).into_iter().rev();
         rev_iter.next();
@@ -737,6 +748,15 @@ impl<
                 if cell.elements.len() + prev.0.elements.len() < CAPACITY {
                     let left_inner = S::make_mut(cell);
                     let right_inner = S::make_mut(&mut prev.0);
+
+                    println!(
+                        "Strong count of left vector: {}",
+                        C::RC::strong_count(&left_inner.elements)
+                    );
+                    println!(
+                        "String count of right vector: {}",
+                        C::RC::strong_count(&right_inner.elements)
+                    );
 
                     let left_vector = C::make_mut(&mut left_inner.elements);
                     let right_vector = C::make_mut(&mut right_inner.elements);
@@ -762,31 +782,64 @@ impl<
 
         nodes.pop().unwrap()
     }
+}
 
-    // fn from_iter<I: IntoIterator<Item = &'a UnrolledList<T, C, S>>>(iter: I) -> Self {}
-    // fn from_iter<I: IntoIterator<Item = UnrolledList<T, C, S>>>(iter: I) -> Self {
-    // // unimplemented!()
+impl<
+        'a,
+        T: 'a + Clone,
+        C: 'a + SmartPointerConstructor<Vec<T>>,
+        S: 'a + SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > FromIterator<&'a UnrolledList<T, C, S>> for UnrolledList<T, C, S>
+{
+    fn from_iter<I: IntoIterator<Item = &'a UnrolledList<T, C, S>>>(iter: I) -> Self {
+        // Links up the nodes
+        let mut nodes: Vec<_> = iter.into_iter().cloned().collect();
 
-    // // Links up the nodes
-    // let mut nodes: Vec<_> = iter.into_iter().collect();
+        let mut rev_iter = (0..nodes.len()).into_iter().rev();
+        rev_iter.next();
 
-    // let mut rev_iter = (0..nodes.len()).into_iter().rev();
-    // rev_iter.next();
+        for i in rev_iter {
+            let mut prev = nodes.pop().unwrap();
 
-    // for i in rev_iter {
-    //     let prev = nodes.pop().unwrap();
+            if let Some(UnrolledList(cell)) = nodes.get_mut(i) {
+                // Check if this node can fit entirely into the previous one
+                if cell.elements.len() + prev.0.elements.len() < CAPACITY {
+                    let left_inner = S::make_mut(cell);
+                    let right_inner = S::make_mut(&mut prev.0);
 
-    //     if let Some(UnrolledList(cell)) = nodes.get_mut(i) {
-    //         S::make_mut(cell).next = Some(prev);
-    //     } else {
-    //         unreachable!()
-    //     }
-    // }
+                    println!(
+                        "Strong count of left vector: {}",
+                        C::RC::strong_count(&left_inner.elements)
+                    );
+                    println!(
+                        "String count of right vector: {}",
+                        C::RC::strong_count(&right_inner.elements)
+                    );
 
-    // nodes.pop().unwrap();
+                    let left_vector = C::make_mut(&mut left_inner.elements);
+                    let right_vector = C::make_mut(&mut right_inner.elements);
 
-    // unimplemented!()
-    // }
+                    // Perform the actual move of the values
+                    right_vector.append(left_vector);
+
+                    // Swap the locations now after we've done the update
+                    std::mem::swap(left_vector, right_vector);
+                    // Adjust the indices accordingly
+                    left_inner.index = left_vector.len();
+                    right_inner.index = 0;
+
+                    // Update this node to now point to the right nodes tail
+                    std::mem::swap(&mut left_inner.next, &mut right_inner.next);
+                } else {
+                    S::make_mut(cell).next = Some(prev);
+                }
+            } else {
+                unreachable!()
+            }
+        }
+
+        nodes.pop().unwrap()
+    }
 }
 
 pub type RcList<T> = UnrolledList<T, RcConstructor, RcConstructor>;
@@ -928,6 +981,12 @@ mod iterator_tests {
 
         // println!("{:?}", right);
         left = left.append(right);
+
+        for node in left.node_iter() {
+            println!("Node elements: {}", node.elements().len())
+        }
+
+        assert_eq!(left.get(300).unwrap(), 300);
 
         // let new = left
         //     .node_iter()
