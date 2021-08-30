@@ -8,7 +8,7 @@ macro_rules! iteration {
     (size = $number:expr, $(($func_name:ident, $type:ty)),* $(,)?) => {
         $(
             fn $func_name(c: &mut Criterion) {
-                let list = (0..10000usize).into_iter().collect::<$type>();
+                let list = (0..$number).into_iter().collect::<$type>();
 
                 c.bench_function(stringify!($func_name), |b| {
                     b.iter(|| black_box((&list).into_iter().sum::<usize>()))
@@ -19,11 +19,11 @@ macro_rules! iteration {
 }
 
 macro_rules! construction {
-    ($(($func_name:ident, $type:ty)),* $(,)?) => {
+    (size = $number:expr, $(($func_name:ident, $type:ty)),* $(,)?) => {
         $(
             fn $func_name(c: &mut Criterion) {
                 c.bench_function(stringify!($func_name), |b| {
-                    b.iter(|| black_box((0..10000usize).into_iter().collect::<$type>()))
+                    b.iter(|| black_box((0..$number).into_iter().collect::<$type>()))
                 });
             }
         )*
@@ -41,7 +41,7 @@ fn cons_up_list(c: &mut Criterion) {
 }
 
 iteration! {
-    size = 10000,
+    size = 100000usize,
     (unrolled_rc_iteration, RcList<_>),
     (unrolled_arc_iteration, ArcList<_>),
     (linked_list_rc_iteration, RcLinkedList<_>),
@@ -51,6 +51,7 @@ iteration! {
 }
 
 construction! {
+    size = 100000usize,
     (unrolled_rc_construction, RcList<_>),
     (linked_list_rc_construction, RcLinkedList<_>),
     (immutable_vector_construction, Vector<_>),
