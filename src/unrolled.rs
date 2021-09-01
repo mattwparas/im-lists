@@ -43,22 +43,44 @@ impl<
         UnrolledCell::cons(value, other)
     }
 
-    // If we can cons in place, do it
-    // otherwise, return the reference to the next cell and use that
-    // This is a bit unergonomic, but it gives us the option for building something in place
-    pub fn cons_mut_in_place(&mut self, value: T) -> Option<UnrolledList<T, C, S>> {
+    /// Alias for cons_mut
+    pub fn push_front(&mut self, value: T) {
+        self.cons_mut(value)
+    }
+
+    pub fn cons_mut(&mut self, value: T) {
         if self.0.full || self.elements().len() > CAPACITY - 1 {
-            Some(UnrolledList(S::RC::new(UnrolledCell {
+            // Make dummy node
+            // return reference to this new node
+            let mut default = UnrolledList(S::RC::new(UnrolledCell {
                 index: 1,
                 elements: C::RC::new(vec![value]),
                 next: Some(self.clone()),
                 full: false,
-            })))
+            }));
+
+            std::mem::swap(self, &mut default);
         } else {
-            self.cons_mut(value);
-            None
+            S::make_mut(&mut self.0).cons_mut(value);
         }
     }
+
+    // If we can cons in place, do it
+    // otherwise, return the reference to the next cell and use that
+    // This is a bit unergonomic, but it gives us the option for building something in place
+    // pub fn cons_mut_in_place(&mut self, value: T) {
+    //     if self.0.full || self.elements().len() > CAPACITY - 1 {
+    //         Some(UnrolledList(S::RC::new(UnrolledCell {
+    //             index: 1,
+    //             elements: C::RC::new(vec![value]),
+    //             next: Some(self.clone()),
+    //             full: false,
+    //         })))
+    //     } else {
+    //         self.0.cons_mut(value);
+    //         None
+    //     }
+    // }
 
     // Should be O(1) always
     // Should also not have to clone
@@ -187,11 +209,11 @@ impl<
         self.0.index
     }
 
-    fn cons_mut(&mut self, value: T) {
-        // self.0.cons_mut(value)
+    // fn cons_mut(&mut self, value: T) {
+    //     // self.0.cons_mut(value)
 
-        todo!()
-    }
+    //     todo!()
+    // }
 }
 
 // Don't blow the stack
@@ -312,7 +334,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
                 full: false,
             }))
         } else {
-            let mut inner = S::make_mut(&mut cdr.0);
+            let inner = S::make_mut(&mut cdr.0);
             let elements = C::make_mut(&mut inner.elements);
             inner.index += 1;
             elements.push(value);
@@ -782,6 +804,35 @@ mod iterator_tests {
 
         for i in 0..300 {
             assert_eq!(list.get(i).unwrap(), i);
+        }
+    }
+
+    #[test]
+    fn cons_mut_new_node() {
+        let mut list: RcList<_> = (0..CAPACITY).into_iter().collect();
+
+        println!("list elements before: {}", list.elements().len());
+
+        list.cons_mut(1000);
+
+        println!("list elements after: {}", list.elements().len());
+
+        println!("{:?}", list);
+    }
+
+    // TODO come back to this
+    #[test]
+    fn cons_mut_list() {
+        let mut list: RcList<_> = RcList::new();
+
+        for i in (0..1000).into_iter().rev() {
+            list.cons_mut(i);
+        }
+
+        println!("list: {:?}", list);
+
+        for i in 0..1000 {
+            println!("{}, {:?}", i, list.get(i));
         }
     }
 }
