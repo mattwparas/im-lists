@@ -23,6 +23,11 @@ impl<
         UnrolledList(S::RC::new(UnrolledCell::new()))
     }
 
+    // Get the strong count of the node in question
+    fn strong_count(&self) -> usize {
+        S::RC::strong_count(&self.0)
+    }
+
     // This is actually like O(n / 64) which is actually quite nice
     // Saves us some time
     pub fn len(&self) -> usize {
@@ -36,6 +41,23 @@ impl<
 
     pub fn cons(value: T, other: Self) -> Self {
         UnrolledCell::cons(value, other)
+    }
+
+    // If we can cons in place, do it
+    // otherwise, return the reference to the next cell and use that
+    // This is a bit unergonomic, but it gives us the option for building something in place
+    pub fn cons_mut_in_place(&mut self, value: T) -> Option<UnrolledList<T, C, S>> {
+        if self.0.full || self.elements().len() > CAPACITY - 1 {
+            Some(UnrolledList(S::RC::new(UnrolledCell {
+                index: 1,
+                elements: C::RC::new(vec![value]),
+                next: Some(self.clone()),
+                full: false,
+            })))
+        } else {
+            self.cons_mut(value);
+            None
+        }
     }
 
     // Should be O(1) always
@@ -112,6 +134,16 @@ impl<
         }
     }
 
+    // Be able to in place mutate
+    pub fn append_mut(&mut self, other: Self) {
+        let mut default = UnrolledList::new();
+        std::mem::swap(self, &mut default);
+
+        default = default.append(other);
+        std::mem::swap(self, &mut default);
+    }
+
+    // Functional append
     pub fn append(self, other: Self) -> Self {
         self.into_node_iter()
             .into_iter()
@@ -135,7 +167,8 @@ impl<
         todo!()
     }
 
-    // Append single value
+    // Append single value (?)
+    // Its super bad and not sure that I would want to support it but here we are
     pub fn push_back(&mut self, value: T) {
         todo!()
     }
@@ -158,6 +191,24 @@ impl<
         // self.0.cons_mut(value)
 
         todo!()
+    }
+}
+
+// Don't blow the stack
+impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<T>>> Drop
+    for UnrolledCell<T, S, C>
+{
+    fn drop(&mut self) {
+        let mut cur = self.next.take().map(|x| x.0);
+        loop {
+            match cur {
+                Some(r) => match S::RC::try_unwrap(r) {
+                    Some(UnrolledCell { ref mut next, .. }) => cur = next.take().map(|x| x.0),
+                    _ => return,
+                },
+                _ => return,
+            }
+        }
     }
 }
 
@@ -288,11 +339,9 @@ impl<
     type Item = UnrolledList<T, C, S>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(_self) = &self.cur {
-            // std::mem::replace(&mut self.cur, _self.0.next.clone())
-
             let ret_val = self.cur.clone();
             self.cur = _self.0.next.clone();
-            return ret_val;
+            ret_val
         } else {
             None
         }
@@ -321,7 +370,7 @@ impl<
         if let Some(_self) = &self.cur {
             let ret_val = self.cur;
             self.cur = _self.0.next.as_ref();
-            return ret_val;
+            ret_val
         } else {
             None
         }
@@ -498,8 +547,6 @@ impl<
         // Links up the nodes
         let mut nodes: Vec<_> = iter.into_iter().collect();
 
-        println!("nodes length: {}", nodes.len());
-
         let mut rev_iter = (0..nodes.len()).into_iter().rev();
         rev_iter.next();
 
@@ -512,14 +559,14 @@ impl<
                     let left_inner = S::make_mut(cell);
                     let right_inner = S::make_mut(&mut prev.0);
 
-                    println!(
-                        "Strong count of left vector: {}",
-                        C::RC::strong_count(&left_inner.elements)
-                    );
-                    println!(
-                        "String count of right vector: {}",
-                        C::RC::strong_count(&right_inner.elements)
-                    );
+                    // println!(
+                    //     "Strong count of left vector: {}",
+                    //     C::RC::strong_count(&left_inner.elements)
+                    // );
+                    // println!(
+                    //     "String count of right vector: {}",
+                    //     C::RC::strong_count(&right_inner.elements)
+                    // );
 
                     let left_vector = C::make_mut(&mut left_inner.elements);
                     let right_vector = C::make_mut(&mut right_inner.elements);
@@ -736,5 +783,50 @@ mod iterator_tests {
         for i in 0..300 {
             assert_eq!(list.get(i).unwrap(), i);
         }
+    }
+}
+
+#[cfg(test)]
+mod reference_counting_correctness {
+
+    use super::*;
+
+    #[derive(Clone)]
+    enum Value {
+        List(RcList<usize>),
+    }
+
+    #[test]
+    fn test_append() {
+        fn function_call(args: &mut [Value]) -> Value {
+            let arg2 = args[1].clone();
+            let mut arg1 = &mut args[0];
+
+            match (&mut arg1, arg2) {
+                (Value::List(left), Value::List(right)) => {
+                    assert_eq!(left.strong_count(), 1);
+                    assert_eq!(right.strong_count(), 2);
+
+                    left.append_mut(right);
+
+                    assert_eq!(left.strong_count(), 1);
+                }
+            }
+
+            arg1.clone()
+        }
+
+        let mut args = vec![
+            Value::List(vec![0, 1, 2, 3, 4, 5].into_iter().collect()),
+            Value::List(vec![6, 7, 8, 9, 10].into_iter().collect()),
+        ];
+
+        let Value::List(result) = function_call(args.as_mut_slice());
+
+        assert_eq!(result.strong_count(), 2);
+
+        // Drop everything from the stack
+        args.clear();
+        assert_eq!(result.strong_count(), 1);
     }
 }
