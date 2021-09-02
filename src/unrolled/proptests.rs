@@ -14,10 +14,20 @@ fn list_strategy_from_iterator() -> impl Strategy<Value = List<isize>> {
 // Generate arbitrary sequence of manipulations to both a vector and a list
 // Apply those manipulations in order, then check that the state of both is the same
 // If the state of the resulting is the same AND the invariants of the list hold, we're good
-enum Actions {
+#[derive(Debug, Clone)]
+enum Action {
     Cons,
     Cdr,
     Append(Vec<usize>),
+}
+
+fn action_strategy() -> impl Strategy<Value = Action> {
+    prop_oneof![
+        Just(Action::Cons),
+        Just(Action::Cdr),
+        prop::collection::vec(0..10000usize, 0..10000)
+            .prop_map(|x| Action::Append(x.into_iter().collect()))
+    ]
 }
 
 proptest! {
