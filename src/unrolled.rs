@@ -1,7 +1,10 @@
+#[cfg(test)]
+mod proptests;
+
 use crate::shared::{ArcConstructor, RcConstructor, SmartPointer, SmartPointerConstructor};
 use itertools::Itertools;
 use std::cmp::Ordering;
-use std::iter::FromIterator;
+use std::iter::{Cloned, FlatMap, Flatten, FromIterator, Map, Rev};
 use std::marker::PhantomData;
 
 const CAPACITY: usize = 256;
@@ -126,6 +129,13 @@ impl<
         }
     }
 
+    // TODO investigate using this for the other iterators and see if its faster
+    // Consuming iterators
+    fn test_iter<'a>(&'a self) -> impl Iterator<Item = &'a T> {
+        self.node_iter()
+            .flat_map(|x| x.elements().into_iter().rev())
+    }
+
     // Every node must have either CAPACITY elements, or be marked as full
     // Debateable whether I want them marked as full
     pub fn assert_invariants(&self) -> bool {
@@ -137,8 +147,8 @@ impl<
     // Looks like its O(n / 64)
     // TODO make this not so bad - also how it works with half full nodes
     pub fn get(&self, mut index: usize) -> Option<T> {
-        if index < CAPACITY {
-            return self.0.elements.get(CAPACITY - index - 1).cloned();
+        if index < self.0.index {
+            return self.0.elements.get(self.0.index - index - 1).cloned();
         } else {
             let mut cur = self.0.next.as_ref();
             index -= self.0.elements.len();
@@ -216,6 +226,21 @@ impl<
     // }
 }
 
+// impl<
+//         T: Clone + 'static,
+//         C: SmartPointerConstructor<Vec<T>> + 'static,
+//         S: SmartPointerConstructor<UnrolledCell<T, S, C>> + 'static,
+//     > UnrolledList<T, C, S>
+// {
+//     fn into_test_iter(self) -> impl Iterator<Item = T> {
+//         self.into_node_iter().flat_map(|x| {
+//             let inner = &x.0.elements;
+
+//             inner.iter().map(|x| x.clone()).rev()
+//         })
+//     }
+// }
+
 // Don't blow the stack
 impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<T>>> Drop
     for UnrolledCell<T, S, C>
@@ -277,8 +302,9 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
         self.elements.get(self.index - 1)
     }
 
+    // TODO fix cdr
     pub fn cdr(&self) -> Option<UnrolledList<T, C, S>> {
-        if self.index < self.elements.len() {
+        if self.index > 1 {
             Some(UnrolledList(S::RC::new(self.advance_cursor())))
         } else {
             self.next.clone()
@@ -287,8 +313,8 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
 
     fn advance_cursor(&self) -> Self {
         UnrolledCell {
-            index: self.index + 1,
-            elements: self.elements.clone(),
+            index: self.index - 1,
+            elements: C::RC::clone(&self.elements),
             next: self.next.clone(),
             full: false,
         }
@@ -808,6 +834,18 @@ mod iterator_tests {
     }
 
     #[test]
+    fn cdr_iterative() {
+        let mut list: Option<RcList<_>> = Some((0..1000).into_iter().collect());
+        let mut i = 0;
+
+        while let Some(car) = list.as_ref().map(|x| x.car()).flatten() {
+            assert_eq!(i, car);
+            list = list.unwrap().cdr();
+            i += 1;
+        }
+    }
+
+    #[test]
     fn cons_mut_new_node() {
         let mut list: RcList<_> = (0..CAPACITY).into_iter().collect();
 
@@ -829,10 +867,8 @@ mod iterator_tests {
             list.cons_mut(i);
         }
 
-        println!("list: {:?}", list);
-
         for i in 0..1000 {
-            println!("{}, {:?}", i, list.get(i));
+            assert_eq!(i, list.get(i).unwrap());
         }
     }
 }

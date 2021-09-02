@@ -40,6 +40,21 @@ fn cons_up_list(c: &mut Criterion) {
     });
 }
 
+fn cdr_iteration(c: &mut Criterion) {
+    c.bench_function("unrolled-cdr-iteration", |b| {
+        b.iter(|| {
+            black_box({
+                let mut list: Option<RcList<_>> = Some((0..10000usize).into_iter().collect());
+
+                while let Some(car) = list.as_ref().map(|x| x.car()).flatten() {
+                    black_box(car);
+                    list = list.unwrap().cdr();
+                }
+            });
+        })
+    });
+}
+
 iteration! {
     size = 100000usize,
     (unrolled_rc_iteration, RcList<_>),
@@ -63,6 +78,7 @@ criterion_group!(
     // Iteration
     unrolled_rc_iteration,
     unrolled_arc_iteration,
+    cdr_iteration,
     linked_list_rc_iteration,
     linked_list_arc_iteration,
     immutable_vector_iteration,
@@ -72,7 +88,7 @@ criterion_group!(
     linked_list_rc_construction,
     immutable_vector_construction,
     vec_construction,
-    cons_up_list
+    cons_up_list,
 );
 
 criterion_main!(benches);
