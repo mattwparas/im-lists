@@ -581,7 +581,7 @@ impl<
             }
         }
 
-        pairs.pop().unwrap()
+        pairs.pop().unwrap_or(Self::new())
     }
 }
 
@@ -638,7 +638,7 @@ impl<
             }
         }
 
-        nodes.pop().unwrap()
+        nodes.pop().unwrap_or(Self::new())
     }
 }
 
@@ -870,6 +870,11 @@ mod iterator_tests {
         for i in 0..1000 {
             assert_eq!(i, list.get(i).unwrap());
         }
+    }
+
+    #[test]
+    fn empty_list() {
+        let list: RcList<usize> = <Vec<usize>>::new().into_iter().collect();
     }
 }
 
