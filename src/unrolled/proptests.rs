@@ -87,6 +87,8 @@ fn vec_strategy() -> impl Strategy<Value = Vec<usize>> {
 }
 
 proptest! {
+    // The next line modifies the number of tests.
+    #![proptest_config(ProptestConfig::with_cases(5))]
     #[test]
     fn append_resulting_length_equivalent(left in list_strategy_from_iterator(), right in list_strategy_from_iterator()) {
         let mut left = left;
@@ -128,15 +130,21 @@ proptest! {
         }
     }
 
-    // #[test]
-    // fn operations_in_order_match(vec in vec_strategy(), actions in actions_strategy()) {
-    //     let initial_list: List<usize> = vec.clone().into_iter().collect();
+    #[test]
+    #[ignore = "test is broken right now"]
+    fn operations_in_order_match(vec in vec_strategy(), actions in actions_strategy()) {
+        let initial_list: List<usize> = vec.clone().into_iter().collect();
 
-    //     let resulting_list = crunch_actions_for_list(initial_list, actions.clone());
-    //     let resulting_vector = crunch_actions_for_vec(vec, actions);
+        println!("{:?}", actions);
 
-    //     for (left, right) in resulting_list.into_iter().zip(resulting_vector.into_iter()) {
-    //         assert_eq!(left, right)
-    //     }
-    // }
+        let resulting_list = crunch_actions_for_list(initial_list, actions.clone());
+        let resulting_vector = crunch_actions_for_vec(vec, actions);
+
+        println!("list: {:?}", resulting_list);
+        println!("vec: {:?}", resulting_vector);
+
+        for (left, right) in resulting_list.into_iter().zip(resulting_vector.into_iter()) {
+            assert_eq!(left, right)
+        }
+    }
 }
