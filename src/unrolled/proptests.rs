@@ -56,19 +56,16 @@ impl Action {
     }
 }
 
-fn crunch_actions_for_vec(mut initial: Vec<usize>, actions: Vec<Action>) -> Vec<usize> {
-    for action in actions {
-        initial = action.act_on_vector(initial);
-    }
-    initial
+fn crunch_actions_for_vec(initial: Vec<usize>, actions: Vec<Action>) -> Vec<usize> {
+    actions
+        .into_iter()
+        .fold(initial, |vec, action| action.act_on_vector(vec))
 }
 
-fn crunch_actions_for_list(mut initial: List<usize>, actions: Vec<Action>) -> List<usize> {
-    for action in actions {
-        initial = action.act_on_list(initial);
-        // println!("After: {:?}", initial);
-    }
-    initial
+fn crunch_actions_for_list(initial: List<usize>, actions: Vec<Action>) -> List<usize> {
+    actions
+        .into_iter()
+        .fold(initial, |list, action| action.act_on_list(list))
 }
 
 fn action_strategy() -> impl Strategy<Value = Action> {
@@ -133,21 +130,12 @@ proptest! {
     }
 
     #[test]
-    // #[ignore = "test is broken right now"]
     fn operations_in_order_match(vec in vec_strategy(), actions in actions_strategy()) {
         let initial_list: List<usize> = vec.clone().into_iter().collect();
-
-        // println!("{:?}", actions);
 
         let resulting_list = crunch_actions_for_list(initial_list, actions.clone());
         let resulting_vector = crunch_actions_for_vec(vec, actions);
 
-        // println!("list: {:?}", resulting_list);
-        // println!("vec: {:?}", resulting_vector);
-
-        // for (left, right) in resulting_list.into_iter().zip(resulting_vector.into_iter()) {
-        //     assert_eq!(left, right)
-        // }
         resulting_list.assert_invariants();
         assert!(Iterator::eq(resulting_list.into_iter(), resulting_vector.into_iter()));
     }
@@ -182,9 +170,6 @@ fn subsequent_cdrs_failing() {
     let output_list = crunch_actions_for_list(list, actions);
 
     assert!(Iterator::eq(resulting.into_iter(), output_list.into_iter()));
-
-    // println!("resulting vec: {:?}", resulting);
-    // println!("resulting list: {:?}", output_list);
 }
 
 #[test]
@@ -206,10 +191,5 @@ fn cdr_to_append() {
     let resulting = crunch_actions_for_vec(vec, actions.clone());
     let output_list = crunch_actions_for_list(list, actions);
 
-    // assert!(Itera)
-
     assert!(Iterator::eq(resulting.into_iter(), output_list.into_iter()));
-
-    // println!("resulting vec: {:?}", resulting);
-    // println!("resulting list: {:?}", output_list);
 }

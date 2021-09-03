@@ -108,6 +108,27 @@ impl<
         self.0.cdr()
     }
 
+    // Returns the cdr of the list
+    // Returns None if the next is empty - otherwise updates self to be the rest
+    pub fn cdr_mut(&mut self) -> Option<&mut Self> {
+        if self.0.index > 1 {
+            S::make_mut(&mut self.0).index -= 1;
+            Some(self)
+        } else {
+            let inner = S::make_mut(&mut self.0);
+            let output = inner.next.take();
+            match output {
+                Some(x) => {
+                    *self = x;
+                }
+                None => {
+                    *self = Self::new();
+                }
+            }
+            Some(self)
+        }
+    }
+
     fn elements(&self) -> &[T] {
         &self.0.elements
     }
@@ -640,15 +661,6 @@ impl<
                     let left_inner = S::make_mut(cell);
                     let right_inner = S::make_mut(&mut prev.0);
 
-                    // println!(
-                    //     "Strong count of left vector: {}",
-                    //     C::RC::strong_count(&left_inner.elements)
-                    // );
-                    // println!(
-                    //     "String count of right vector: {}",
-                    //     C::RC::strong_count(&right_inner.elements)
-                    // );
-
                     let left_vector = C::make_mut(&mut left_inner.elements);
                     let right_vector = C::make_mut(&mut right_inner.elements);
 
@@ -689,6 +701,17 @@ impl<
 {
     fn from_iter<I: IntoIterator<Item = &'a UnrolledList<T, C, S>>>(iter: I) -> Self {
         iter.into_iter().cloned().collect()
+    }
+}
+
+impl<
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > From<Vec<T>> for UnrolledList<T, C, S>
+{
+    fn from(vec: Vec<T>) -> Self {
+        vec.into_iter().collect()
     }
 }
 
@@ -928,6 +951,16 @@ mod iterator_tests {
             cdr.into_iter().collect::<Vec<_>>(),
             expected_cdr.into_iter().collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn cdr_mut() {
+        let mut list: RcList<usize> = vec![1, 2, 3].into_iter().collect();
+        println!("{:?}", list.cdr_mut());
+        println!("{:?}", list.cdr_mut());
+        println!("{:?}", list.cdr_mut());
+        println!("{:?}", list.cdr_mut());
+        println!("{:?}", list.cdr_mut());
     }
 }
 
