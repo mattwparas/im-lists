@@ -9,7 +9,8 @@ use std::marker::PhantomData;
 
 const CAPACITY: usize = 256;
 
-// pub struct List<T: Clone>(UnrolledList<T, RcConstructor, RcConstructor>);
+pub struct List<T: Clone>(UnrolledList<T, RcConstructor, RcConstructor>);
+pub struct SharedList<T: Clone>(UnrolledList<T, ArcConstructor, ArcConstructor>);
 
 #[derive(Clone)]
 pub struct UnrolledList<
@@ -86,23 +87,6 @@ impl<
             // println!("#### After: {:?}", self.elements());
         }
     }
-
-    // If we can cons in place, do it
-    // otherwise, return the reference to the next cell and use that
-    // This is a bit unergonomic, but it gives us the option for building something in place
-    // pub fn cons_mut_in_place(&mut self, value: T) {
-    //     if self.0.full || self.elements().len() > CAPACITY - 1 {
-    //         Some(UnrolledList(S::RC::new(UnrolledCell {
-    //             index: 1,
-    //             elements: C::RC::new(vec![value]),
-    //             next: Some(self.clone()),
-    //             full: false,
-    //         })))
-    //     } else {
-    //         self.0.cons_mut(value);
-    //         None
-    //     }
-    // }
 
     // Should be O(1) always
     // Should also not have to clone
