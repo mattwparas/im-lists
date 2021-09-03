@@ -52,6 +52,18 @@ impl<
         self.node_iter().map(|node| node.index()).sum()
     }
 
+    fn reverse(self) -> Self {
+        todo!()
+    }
+
+    fn last(&self) -> Option<T> {
+        self.node_iter()
+            .last()
+            .map(|x| x.elements().first())
+            .flatten()
+            .cloned()
+    }
+
     // Should be O(1) always
     pub fn car(&self) -> Option<T> {
         self.0.car().cloned()
