@@ -805,44 +805,23 @@ mod iterator_tests {
         // 256 + 100
         let mut left: RcList<_> = (0..CAPACITY + 100).into_iter().collect();
 
-        // for node in left.node_iter() {
-        //     println!("elements in node: {:?}", node.elements());
-        // }
-
         // 400
         let right: RcList<_> = (CAPACITY + 100..CAPACITY + 500).into_iter().collect();
 
-        // println!("{:?}", right);
         left = left.append(right);
 
-        for node in left.node_iter() {
-            println!("Node elements: {}", node.elements().len())
-        }
+        // Should have 4 nodes at this point
+        assert_eq!(left.node_iter().count(), 4);
 
+        // 300 should be at 300
         assert_eq!(left.get(300).unwrap(), 300);
-
-        // let new = left
-        //     .node_iter()
-        //     .into_iter()
-        //     .chain(right.node_iter())
-        //     .collect::<RcList<usize>>();
-
-        // println!("new list: {:?}", new);
-        // println!("new list length: {:?}", new.len());
-
         left.assert_list_invariants();
-
-        println!("length: {}", left.len());
-
-        println!("{:?}", left);
     }
 
     #[test]
     fn length() {
         let list: RcList<_> = (0..300).into_iter().collect();
         assert_eq!(list.len(), 300);
-
-        println!("list: {:?}", list);
     }
 
     #[test]
@@ -870,16 +849,16 @@ mod iterator_tests {
     fn cons_mut_new_node() {
         let mut list: RcList<_> = (0..CAPACITY).into_iter().collect();
 
-        println!("list elements before: {}", list.elements().len());
+        // Should have 1 node at this point
+        assert_eq!(list.node_iter().count(), 1);
 
+        // Consing should move to a new node
         list.cons_mut(1000);
 
-        println!("list elements after: {}", list.elements().len());
-
-        println!("{:?}", list);
+        // This should be 2 at this point
+        assert_eq!(list.node_iter().count(), 2);
     }
 
-    // TODO come back to this
     #[test]
     fn cons_mut_list() {
         let mut list: RcList<_> = RcList::new();
@@ -915,12 +894,13 @@ mod iterator_tests {
 
     #[test]
     fn cdr_mut() {
-        let mut list: RcList<usize> = vec![1, 2, 3].into_iter().collect();
-        println!("{:?}", list.cdr_mut());
-        println!("{:?}", list.cdr_mut());
-        println!("{:?}", list.cdr_mut());
-        println!("{:?}", list.cdr_mut());
-        println!("{:?}", list.cdr_mut());
+        let mut list: RcList<usize> = vec![1, 2, 3usize].into_iter().collect();
+        assert!(list.cdr_mut().is_some());
+        assert_eq!(list.len(), 2);
+        assert!(list.cdr_mut().is_some());
+        assert_eq!(list.len(), 1);
+        assert!(list.cdr_mut().is_none());
+        assert_eq!(list.len(), 0);
     }
 }
 
