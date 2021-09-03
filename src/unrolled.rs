@@ -9,12 +9,24 @@ use std::marker::PhantomData;
 
 const CAPACITY: usize = 256;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub struct UnrolledList<
     T: Clone,
     C: SmartPointerConstructor<Vec<T>>,
     S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
 >(S::RC);
+
+// Check if these lists are equivalent via the iterator
+impl<
+        T: Clone + PartialEq,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > PartialEq for UnrolledList<T, C, S>
+{
+    fn eq(&self, other: &Self) -> bool {
+        Iterator::eq(self.into_iter(), other.into_iter())
+    }
+}
 
 impl<
         T: Clone,
@@ -64,7 +76,12 @@ impl<
 
             std::mem::swap(self, &mut default);
         } else {
-            S::make_mut(&mut self.0).cons_mut(value);
+            // println!("#### before: {:?}", self.elements());
+
+            let inner = S::make_mut(&mut self.0);
+            inner.cons_mut(value);
+
+            // println!("#### After: {:?}", self.elements());
         }
     }
 
@@ -322,7 +339,21 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
 
     // TODO make this better
     pub fn cons_mut(&mut self, value: T) {
-        C::make_mut(&mut self.elements).push(value);
+        let reference = C::make_mut(&mut self.elements);
+
+        // If the cursor isn't pointing to the end, wipe out elements that aren't useful to us
+        // anymore since we've copied the underlying vector
+        if self.index < reference.len() {
+            reference.truncate(self.index);
+        }
+
+        reference.push(value);
+
+        // std::mem::swap(&mut self.elements, reference);
+
+        // self.elements = reference;
+
+        // C::make_mut(&mut self.elements).push(value);
         self.index += 1;
     }
 
@@ -595,6 +626,8 @@ impl<
         // Links up the nodes
         let mut nodes: Vec<_> = iter.into_iter().collect();
 
+        println!("Inside here!");
+
         let mut rev_iter = (0..nodes.len()).into_iter().rev();
         rev_iter.next();
 
@@ -618,6 +651,11 @@ impl<
 
                     let left_vector = C::make_mut(&mut left_inner.elements);
                     let right_vector = C::make_mut(&mut right_inner.elements);
+
+                    // Drop the useless elements
+                    if left_inner.index < left_vector.len() {
+                        left_vector.truncate(left_inner.index);
+                    }
 
                     // Perform the actual move of the values
                     right_vector.append(left_vector);
@@ -875,6 +913,21 @@ mod iterator_tests {
     #[test]
     fn empty_list() {
         let list: RcList<usize> = <Vec<usize>>::new().into_iter().collect();
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn cdr_works_successfully() {
+        let list: RcList<usize> = vec![1, 2, 3, 4, 5].into_iter().collect();
+
+        let cdr = list.cdr().unwrap();
+
+        let expected_cdr: RcList<usize> = vec![2, 3, 4, 5].into_iter().collect();
+
+        assert_eq!(
+            cdr.into_iter().collect::<Vec<_>>(),
+            expected_cdr.into_iter().collect::<Vec<_>>()
+        );
     }
 }
 

@@ -1,6 +1,6 @@
 use std::{ops::Deref, rc::Rc, sync::Arc};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct RcConstructor {}
 
 impl<T> SmartPointerConstructor<T> for RcConstructor {
