@@ -378,11 +378,6 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
 
         reference.push(value);
 
-        // std::mem::swap(&mut self.elements, reference);
-
-        // self.elements = reference;
-
-        // C::make_mut(&mut self.elements).push(value);
         self.index += 1;
     }
 
@@ -655,8 +650,6 @@ impl<
         // Links up the nodes
         let mut nodes: Vec<_> = iter.into_iter().collect();
 
-        println!("Inside here!");
-
         let mut rev_iter = (0..nodes.len()).into_iter().rev();
         rev_iter.next();
 
@@ -730,44 +723,19 @@ pub type ArcList<T> = UnrolledList<T, ArcConstructor, ArcConstructor>;
 mod tests {
 
     use super::*;
-    // use std::rc::Rc;
 
     #[test]
     fn basic_iteration() {
         let list: RcList<_> = (0..100usize).into_iter().collect();
         let vec: Vec<_> = (0..100usize).into_iter().collect();
 
-        for item in list.clone() {
-            println!("ITERATING: {}", item);
-        }
-
-        for (left, right) in list.into_iter().zip(vec.into_iter()) {
-            assert_eq!(left, right)
-        }
+        Iterator::eq(list.into_iter(), vec.into_iter());
     }
-
-    // #[test]
-    // fn consing() {
-    //     let list = RcList::cons()
-
-    //     println!("list elements: {:?}", list.elements);
-
-    //     for item in list {
-    //         println!("{}", item);
-    //     }
-    // }
 
     #[test]
     fn small() {
         let list: RcList<_> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9].into_iter().collect();
-
-        println!("list elements: {:?}", list.0.elements);
-
-        println!("list: {:?}", list);
-
-        for item in list {
-            println!("ITERATING: {}", item);
-        }
+        Iterator::eq(list.into_iter(), (1..=9).into_iter());
     }
 
     #[test]
@@ -775,14 +743,8 @@ mod tests {
         let mut left: RcList<_> = vec![1, 2, 3, 4, 5].into_iter().collect();
         let right: RcList<_> = vec![6, 7, 8, 9, 10].into_iter().collect();
         left = left.append(right.clone());
-
-        for item in left {
-            println!("Iterating: {}", item);
-        }
-
-        for item in right {
-            println!("Iterating: {}", item)
-        }
+        left.assert_invariants();
+        Iterator::eq(left.into_iter(), (1..=10).into_iter());
     }
 
     #[test]
@@ -794,18 +756,8 @@ mod tests {
 
         left.assert_invariants();
 
-        for item in left {
-            println!("iterating: {}", item);
-        }
+        Iterator::eq(left.into_iter(), (0..100).into_iter());
     }
-
-    // #[test]
-    // fn boxing() {
-    //     let list: BoxList<_> = vec![1, 2, 3, 4, 5].into_iter().collect();
-    //     for item in list {
-    //         println!("ITERATING: {}", item);
-    //     }
-    // }
 }
 
 #[cfg(test)]
