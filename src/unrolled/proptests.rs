@@ -44,7 +44,7 @@ impl Action {
     }
 
     fn act_on_list(self, mut list: List<usize>) -> List<usize> {
-        println!("Action: {:?}, List: {:?}", self, list);
+        // println!("Action: {:?}, List: {:?}", self, list);
         match self {
             Action::Cons(value) => {
                 list.cons_mut(value);
@@ -66,7 +66,7 @@ fn crunch_actions_for_vec(mut initial: Vec<usize>, actions: Vec<Action>) -> Vec<
 fn crunch_actions_for_list(mut initial: List<usize>, actions: Vec<Action>) -> List<usize> {
     for action in actions {
         initial = action.act_on_list(initial);
-        println!("After: {:?}", initial);
+        // println!("After: {:?}", initial);
     }
     initial
 }
