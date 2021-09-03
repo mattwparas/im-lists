@@ -131,14 +131,21 @@ proptest! {
 
     #[test]
     fn operations_in_order_match(vec in vec_strategy(), actions in actions_strategy()) {
-        let initial_list: List<usize> = vec.clone().into_iter().collect();
-
-        let resulting_list = crunch_actions_for_list(initial_list, actions.clone());
-        let resulting_vector = crunch_actions_for_vec(vec, actions);
-
-        resulting_list.assert_invariants();
-        assert!(Iterator::eq(resulting_list.into_iter(), resulting_vector.into_iter()));
+        random_test_runner(vec, actions);
     }
+}
+
+fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {
+    let initial_list: List<usize> = vec.clone().into_iter().collect();
+
+    let resulting_list = crunch_actions_for_list(initial_list, actions.clone());
+    let resulting_vector = crunch_actions_for_vec(vec, actions);
+
+    resulting_list.assert_invariants();
+    assert!(Iterator::eq(
+        resulting_list.into_iter(),
+        resulting_vector.into_iter()
+    ));
 }
 
 #[test]
@@ -153,8 +160,6 @@ fn subsequent_cdrs_failing() {
         7194, 8764, 9606, 5895, 894, 9372, 7560, 7405, 5994, 3055, 5472, 1020, 6708, 465, 4485,
     ];
 
-    let list = vec.clone().into_iter().collect::<List<_>>();
-
     let actions = vec![
         Cdr,
         Cdr,
@@ -166,10 +171,7 @@ fn subsequent_cdrs_failing() {
         Cons(2977697179080415033),
     ];
 
-    let resulting = crunch_actions_for_vec(vec, actions.clone());
-    let output_list = crunch_actions_for_list(list, actions);
-
-    assert!(Iterator::eq(resulting.into_iter(), output_list.into_iter()));
+    random_test_runner(vec, actions);
 }
 
 #[test]
@@ -177,8 +179,6 @@ fn cdr_to_append() {
     use Action::*;
 
     let vec = vec![2033, 9558, 2726, 6383, 5557, 8720, 2270, 9933];
-
-    let list = vec.clone().into_iter().collect::<List<_>>();
 
     let actions = vec![
         Cdr,
@@ -188,8 +188,5 @@ fn cdr_to_append() {
         Cons(11950321023595395400),
     ];
 
-    let resulting = crunch_actions_for_vec(vec, actions.clone());
-    let output_list = crunch_actions_for_list(list, actions);
-
-    assert!(Iterator::eq(resulting.into_iter(), output_list.into_iter()));
+    random_test_runner(vec, actions);
 }
