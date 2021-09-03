@@ -9,6 +9,8 @@ use std::marker::PhantomData;
 
 const CAPACITY: usize = 256;
 
+// pub struct List<T: Clone>(UnrolledList<T, RcConstructor, RcConstructor>);
+
 #[derive(Clone)]
 pub struct UnrolledList<
     T: Clone,
@@ -46,7 +48,7 @@ impl<
     // This is actually like O(n / 64) which is actually quite nice
     // Saves us some time
     pub fn len(&self) -> usize {
-        self.node_iter().map(|node| node.elements().len()).sum()
+        self.node_iter().map(|node| node.index()).sum()
     }
 
     // Should be O(1) always
@@ -120,12 +122,13 @@ impl<
             match output {
                 Some(x) => {
                     *self = x;
+                    Some(self)
                 }
                 None => {
                     *self = Self::new();
+                    None
                 }
             }
-            Some(self)
         }
     }
 
@@ -336,7 +339,12 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
         self.elements.is_empty()
     }
 
+    // TODO this fails on an empty list
+    // Speed this up by fixing the indexing
     pub fn car(&self) -> Option<&T> {
+        if self.index == 0 {
+            return None;
+        }
         self.elements.get(self.index - 1)
     }
 

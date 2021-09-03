@@ -133,6 +133,19 @@ proptest! {
     fn operations_in_order_match(vec in vec_strategy(), actions in actions_strategy()) {
         random_test_runner(vec, actions);
     }
+
+    #[test]
+    fn iteration_using_cdr(vec in vec_strategy()) {
+        let mut list: List<usize> = vec.clone().into();
+        while let Some(cdr) = list.cdr_mut() {
+            cdr.car().expect("Missing value from car");
+        }
+    }
+
+    #[test]
+    fn len_decreases_by_one_with_cdr(vec in vec_strategy()) {
+        cdr_returns_smaller_vec(vec);
+    }
 }
 
 fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {
@@ -146,6 +159,22 @@ fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {
         resulting_list.into_iter(),
         resulting_vector.into_iter()
     ));
+}
+
+fn cdr_returns_smaller_vec(vec: Vec<usize>) {
+    let mut list: List<usize> = vec.clone().into();
+    let mut length = list.len();
+    while let Some(cdr) = list.cdr_mut() {
+        length -= 1;
+        assert_eq!(length, cdr.len())
+    }
+}
+
+#[test]
+fn gets_smaller_with_cdr() {
+    let vec = vec![1, 2, 3, 4, 5];
+
+    cdr_returns_smaller_vec(vec)
 }
 
 #[test]
