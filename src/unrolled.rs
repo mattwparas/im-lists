@@ -55,7 +55,7 @@ impl<
     // [0 1 2 3 4 5] -> [6 7 8 9 10]
     // [5 4 3 2 1] <- [10 9 8 7 6]
     // This should be O(n / 256)
-    fn reverse(self) -> Self {
+    pub fn reverse(self) -> Self {
         let mut node_iter = self.into_node_iter();
         let mut left = node_iter.next().expect("This node should always exist");
         {
@@ -74,7 +74,7 @@ impl<
         left
     }
 
-    fn last(&self) -> Option<T> {
+    pub fn last(&self) -> Option<T> {
         self.node_iter()
             .last()
             .map(|x| x.elements().first())
@@ -186,7 +186,7 @@ impl<
 
     // TODO investigate using this for the other iterators and see if its faster
     // Consuming iterators
-    fn test_iter<'a>(&'a self) -> impl Iterator<Item = &'a T> {
+    pub fn test_iter<'a>(&'a self) -> impl Iterator<Item = &'a T> {
         self.node_iter()
             .flat_map(|x| x.elements().into_iter().rev())
     }

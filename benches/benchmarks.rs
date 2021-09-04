@@ -55,6 +55,15 @@ fn cdr_iteration(c: &mut Criterion) {
     });
 }
 
+fn unrolled_test_iter(c: &mut Criterion) {
+    let list = (0..100000usize).into_iter().collect::<RcList<_>>();
+    c.bench_function("unrolled-test-iter", |b| {
+        b.iter(|| {
+            black_box(list.test_iter().cloned().sum::<usize>());
+        })
+    });
+}
+
 iteration! {
     size = 100000usize,
     (unrolled_rc_iteration, RcList<_>),
@@ -89,6 +98,7 @@ criterion_group!(
     immutable_vector_construction,
     vec_construction,
     cons_up_list,
+    unrolled_test_iter,
 );
 
 criterion_main!(benches);
