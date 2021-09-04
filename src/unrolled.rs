@@ -922,9 +922,28 @@ mod iterator_tests {
         let list: RcList<usize> = (0..500).into_iter().collect();
         let reversed = list.reverse();
 
-        println!("{:?}", reversed);
+        assert!(Iterator::eq(
+            (0..500).into_iter().rev(),
+            reversed.into_iter()
+        ));
+    }
 
-        // assert!(Iterator::eq((10..0).into_iter(), reversed.into_iter()));
+    #[test]
+    fn last() {
+        let list: RcList<usize> = RcList::new();
+        assert!(list.last().is_none());
+    }
+
+    #[test]
+    fn last_single_node() {
+        let list: RcList<_> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].into();
+        assert_eq!(list.last(), Some(10));
+    }
+
+    #[test]
+    fn last_multiple_nodes() {
+        let list: RcList<_> = (0..2 * CAPACITY).into_iter().collect();
+        assert_eq!(list.last(), Some(CAPACITY * 2 - 1))
     }
 }
 
