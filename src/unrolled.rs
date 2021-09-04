@@ -191,6 +191,11 @@ impl<
             .flat_map(|x| x.elements().into_iter().rev())
     }
 
+    // pub fn into_test_iter(self) -> impl Iterator<Item = T> {
+    //     self.into_node_iter()
+    //         .flat_map(|x| x.0.clone().elements.iter().cloned())
+    // }
+
     // Every node must have either CAPACITY elements, or be marked as full
     // Debateable whether I want them marked as full
     pub fn assert_invariants(&self) -> bool {
