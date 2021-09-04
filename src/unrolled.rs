@@ -52,8 +52,26 @@ impl<
         self.node_iter().map(|node| node.index()).sum()
     }
 
+    // [0 1 2 3 4 5] -> [6 7 8 9 10]
+    // [5 4 3 2 1] <- [10 9 8 7 6]
+    // This should be O(n / 256)
     fn reverse(self) -> Self {
-        todo!()
+        let mut node_iter = self.into_node_iter();
+        let mut left = node_iter.next().expect("This node should always exist");
+        {
+            let inner = S::make_mut(&mut left.0);
+            C::make_mut(&mut inner.elements).reverse();
+            inner.next = None;
+        }
+
+        while let Some(mut right) = node_iter.next() {
+            let cell = S::make_mut(&mut right.0);
+            C::make_mut(&mut cell.elements).reverse();
+            cell.next = Some(left);
+            left = right;
+        }
+
+        left
     }
 
     fn last(&self) -> Option<T> {
@@ -897,6 +915,16 @@ mod iterator_tests {
         assert_eq!(list.len(), 1);
         assert!(list.cdr_mut().is_none());
         assert_eq!(list.len(), 0);
+    }
+
+    #[test]
+    fn reverse() {
+        let list: RcList<usize> = (0..500).into_iter().collect();
+        let reversed = list.reverse();
+
+        println!("{:?}", reversed);
+
+        // assert!(Iterator::eq((10..0).into_iter(), reversed.into_iter()));
     }
 }
 

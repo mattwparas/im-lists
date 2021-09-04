@@ -146,6 +146,17 @@ proptest! {
     fn len_decreases_by_one_with_cdr(vec in vec_strategy()) {
         cdr_returns_smaller_vec(vec);
     }
+
+    #[test]
+    fn reverse_matches_expected(vec in vec_strategy()) {
+        let mut list: List<usize> = vec.clone().into();
+        list = list.reverse();
+
+        let mut vec = vec;
+        vec.reverse();
+
+        assert!(Iterator::eq(list.into_iter(), vec.into_iter()));
+    }
 }
 
 fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {
