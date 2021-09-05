@@ -60,13 +60,25 @@ impl<
         let mut left = node_iter.next().expect("This node should always exist");
         {
             let inner = S::make_mut(&mut left.0);
-            C::make_mut(&mut inner.elements).reverse();
+            let elements_mut = C::make_mut(&mut inner.elements);
+
+            if inner.index < elements_mut.len() {
+                elements_mut.truncate(inner.index);
+            }
+
+            elements_mut.reverse();
             inner.next = None;
         }
 
         while let Some(mut right) = node_iter.next() {
             let cell = S::make_mut(&mut right.0);
-            C::make_mut(&mut cell.elements).reverse();
+            let elements_mut = C::make_mut(&mut cell.elements);
+
+            if cell.index < elements_mut.len() {
+                elements_mut.truncate(cell.index);
+            }
+
+            elements_mut.reverse();
             cell.next = Some(left);
             left = right;
         }
@@ -99,7 +111,7 @@ impl<
     pub fn cons_mut(&mut self, value: T) {
         let index = self.0.index;
         if self.0.index < self.elements().len() {
-            // println!("Inside cons_mut here!");
+            println!("Inside cons_mut here!");
             // reference.truncate(self.index);
             C::make_mut(&mut S::make_mut(&mut self.0).elements).truncate(index);
         }
@@ -119,7 +131,7 @@ impl<
 
             std::mem::swap(self, &mut default);
         } else {
-            // println!("Case 2");
+            println!("Case 2");
             // println!("#### before: {:?}", self.elements());
 
             let inner = S::make_mut(&mut self.0);
@@ -408,7 +420,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
 
     // TODO fix cdr
     pub fn cdr(&self) -> Option<UnrolledList<T, C, S>> {
-        println!("index: {}", self.index);
+        // println!("index: {}", self.index);
         if self.index > 1 {
             Some(UnrolledList(S::RC::new(self.advance_cursor())))
         } else {
