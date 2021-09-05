@@ -46,6 +46,10 @@ impl<
         S::RC::strong_count(&self.0)
     }
 
+    pub fn cell_count(&self) -> usize {
+        self.node_iter().count()
+    }
+
     // This is actually like O(n / 64) which is actually quite nice
     // Saves us some time
     pub fn len(&self) -> usize {
@@ -337,21 +341,6 @@ impl<
     // }
 }
 
-// impl<
-//         T: Clone + 'static,
-//         C: SmartPointerConstructor<Vec<T>> + 'static,
-//         S: SmartPointerConstructor<UnrolledCell<T, S, C>> + 'static,
-//     > UnrolledList<T, C, S>
-// {
-//     fn into_test_iter(self) -> impl Iterator<Item = T> {
-//         self.into_node_iter().flat_map(|x| {
-//             let inner = &x.0.elements;
-
-//             inner.iter().map(|x| x.clone()).rev()
-//         })
-//     }
-// }
-
 // Don't blow the stack
 impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<T>>> Drop
     for UnrolledCell<T, S, C>
@@ -474,7 +463,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
     }
 }
 
-struct NodeIter<
+pub struct NodeIter<
     T: Clone,
     C: SmartPointerConstructor<Vec<T>>,
     S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
@@ -501,7 +490,7 @@ impl<
     }
 }
 
-struct NodeIterRef<
+pub struct NodeIterRef<
     'a,
     T: Clone,
     C: SmartPointerConstructor<Vec<T>>,
@@ -530,30 +519,6 @@ impl<
     }
 }
 
-pub struct ConsumingIterWrapper<
-    T: Clone,
-    C: SmartPointerConstructor<Vec<T>>,
-    S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
->(
-    FlatMap<
-        NodeIter<T, C, S>,
-        Rev<std::iter::Take<std::vec::IntoIter<T>>>,
-        fn(UnrolledList<T, C, S>) -> Rev<std::iter::Take<std::vec::IntoIter<T>>>,
-    >,
-);
-
-impl<
-        T: Clone,
-        C: SmartPointerConstructor<Vec<T>>,
-        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
-    > Iterator for ConsumingIterWrapper<T, C, S>
-{
-    type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
-    }
-}
-
 impl<
         T: Clone,
         C: SmartPointerConstructor<Vec<T>>,
@@ -561,42 +526,19 @@ impl<
     > IntoIterator for UnrolledList<T, C, S>
 {
     type Item = T;
-    type IntoIter = ConsumingIterWrapper<T, C, S>;
+    type IntoIter = FlatMap<
+        NodeIter<T, C, S>,
+        Rev<std::iter::Take<std::vec::IntoIter<T>>>,
+        fn(UnrolledList<T, C, S>) -> Rev<std::iter::Take<std::vec::IntoIter<T>>>,
+    >;
 
     fn into_iter(self) -> Self::IntoIter {
-        ConsumingIterWrapper(self.into_node_iter().flat_map(move |mut x| {
+        self.into_node_iter().flat_map(move |mut x| {
             let cell = S::make_mut(&mut x.0);
             let vec = C::make_mut(&mut cell.elements);
             let elements = std::mem::take(vec);
             elements.into_iter().take(x.index()).rev()
-        }))
-    }
-}
-
-pub struct IterWrapper<
-    'a,
-    T: Clone,
-    C: SmartPointerConstructor<Vec<T>>,
-    S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
->(
-    FlatMap<
-        NodeIterRef<'a, T, C, S>,
-        Rev<std::slice::Iter<'a, T>>,
-        fn(&'a UnrolledList<T, C, S>) -> Rev<std::slice::Iter<'a, T>>,
-    >,
-);
-
-impl<
-        'a,
-        T: Clone,
-        C: SmartPointerConstructor<Vec<T>>,
-        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
-    > Iterator for IterWrapper<'a, T, C, S>
-{
-    type Item = &'a T;
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
+        })
     }
 }
 
@@ -608,14 +550,16 @@ impl<
     > IntoIterator for &'a UnrolledList<T, C, S>
 {
     type Item = &'a T;
-    type IntoIter = IterWrapper<'a, T, C, S>;
+    type IntoIter = FlatMap<
+        NodeIterRef<'a, T, C, S>,
+        Rev<std::slice::Iter<'a, T>>,
+        fn(&'a UnrolledList<T, C, S>) -> Rev<std::slice::Iter<'a, T>>,
+    >;
 
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
-        IterWrapper(
-            self.node_iter()
-                .flat_map(|x| x.elements()[0..x.index()].into_iter().rev()),
-        )
+        self.node_iter()
+            .flat_map(|x| x.elements()[0..x.index()].into_iter().rev())
     }
 }
 
