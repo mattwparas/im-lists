@@ -960,6 +960,31 @@ mod iterator_tests {
         let list: RcList<_> = (0..2 * CAPACITY).into_iter().collect();
         assert_eq!(list.last(), Some(CAPACITY * 2 - 1))
     }
+
+    #[test]
+    fn testing_iteration_duration() {
+        use std::time::{Duration, Instant};
+
+        let list = (0..100000).into_iter().collect::<RcList<_>>();
+
+        let now = Instant::now();
+
+        let sum1 = list.iter().sum::<usize>();
+
+        let sum1time = now.elapsed();
+        let now2 = Instant::now();
+
+        let sum2 = (&list).into_iter().sum::<usize>();
+
+        let sum2time = now2.elapsed();
+
+        println!(
+            "Sum1: {:?} - {:?}, Sum2: {:?} - {:?}",
+            sum1, sum1time, sum2, sum2time
+        );
+
+        // println!("")
+    }
 }
 
 #[cfg(test)]
