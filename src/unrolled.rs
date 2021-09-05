@@ -42,7 +42,7 @@ impl<
     }
 
     // Get the strong count of the node in question
-    fn strong_count(&self) -> usize {
+    pub fn strong_count(&self) -> usize {
         S::RC::strong_count(&self.0)
     }
 
@@ -111,7 +111,7 @@ impl<
     pub fn cons_mut(&mut self, value: T) {
         let index = self.0.index;
         if self.0.index < self.elements().len() {
-            println!("Inside cons_mut here!");
+            // println!("Inside cons_mut here!");
             // reference.truncate(self.index);
             C::make_mut(&mut S::make_mut(&mut self.0).elements).truncate(index);
         }
@@ -119,7 +119,7 @@ impl<
         // TODO cdr here is an issue - only moves the offset, no way to know that its full
         // Cause its not actually full
         if self.0.full || self.elements().len() > CAPACITY - 1 {
-            println!("Case 1: {}, {}", self.0.full, self.elements().len());
+            // println!("Case 1: {}, {}", self.0.full, self.elements().len());
             // Make dummy node
             // return reference to this new node
             let mut default = UnrolledList(S::RC::new(UnrolledCell {
@@ -131,7 +131,7 @@ impl<
 
             std::mem::swap(self, &mut default);
         } else {
-            println!("Case 2");
+            // println!("Case 2");
             // println!("#### before: {:?}", self.elements());
 
             let inner = S::make_mut(&mut self.0);
@@ -376,10 +376,10 @@ pub struct UnrolledCell<
     S: SmartPointerConstructor<Self>,
     C: SmartPointerConstructor<Vec<T>>,
 > {
-    pub index: usize,
-    pub elements: C::RC,
-    pub next: Option<UnrolledList<T, C, S>>,
-    pub full: bool,
+    index: usize,
+    elements: C::RC,
+    next: Option<UnrolledList<T, C, S>>,
+    full: bool,
 }
 
 impl<
@@ -396,7 +396,7 @@ impl<
 impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<T>>>
     UnrolledCell<T, S, C>
 {
-    pub fn new() -> Self {
+    fn new() -> Self {
         UnrolledCell {
             index: 0,
             elements: C::RC::new(Vec::new()),
@@ -405,13 +405,13 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.elements.is_empty()
-    }
+    // fn is_empty(&self) -> bool {
+    //     self.elements.is_empty()
+    // }
 
     // TODO this fails on an empty list
     // Speed this up by fixing the indexing
-    pub fn car(&self) -> Option<&T> {
+    fn car(&self) -> Option<&T> {
         if self.index == 0 {
             return None;
         }
@@ -419,7 +419,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
     }
 
     // TODO fix cdr
-    pub fn cdr(&self) -> Option<UnrolledList<T, C, S>> {
+    fn cdr(&self) -> Option<UnrolledList<T, C, S>> {
         // println!("index: {}", self.index);
         if self.index > 1 {
             Some(UnrolledList(S::RC::new(self.advance_cursor())))
@@ -438,7 +438,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
     }
 
     // TODO make this better
-    pub fn cons_mut(&mut self, value: T) {
+    fn cons_mut(&mut self, value: T) {
         let reference = C::make_mut(&mut self.elements);
 
         // If the cursor isn't pointing to the end, wipe out elements that aren't useful to us
@@ -454,32 +454,32 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
         self.index += 1;
     }
 
-    pub fn cons_empty(value: T) -> Self {
-        UnrolledCell {
-            index: 0,
-            elements: C::RC::new(vec![value]),
-            next: None,
-            full: false,
-        }
-    }
+    // fn cons_empty(value: T) -> Self {
+    //     UnrolledCell {
+    //         index: 0,
+    //         elements: C::RC::new(vec![value]),
+    //         next: None,
+    //         full: false,
+    //     }
+    // }
 
-    pub fn cons_raw(value: T, mut cdr: UnrolledList<T, C, S>) -> UnrolledList<T, C, S> {
-        if cdr.0.full || cdr.elements().len() > CAPACITY - 1 {
-            UnrolledList(S::RC::new(UnrolledCell {
-                index: 1,
-                elements: C::RC::new(vec![value]),
-                next: Some(cdr),
-                full: false,
-            }))
-        } else {
-            cdr.cons_mut(value);
-            cdr
-        }
-    }
+    // fn cons_raw(value: T, mut cdr: UnrolledList<T, C, S>) -> UnrolledList<T, C, S> {
+    //     if cdr.0.full || cdr.elements().len() > CAPACITY - 1 {
+    //         UnrolledList(S::RC::new(UnrolledCell {
+    //             index: 1,
+    //             elements: C::RC::new(vec![value]),
+    //             next: Some(cdr),
+    //             full: false,
+    //         }))
+    //     } else {
+    //         cdr.cons_mut(value);
+    //         cdr
+    //     }
+    // }
 
     // Spill over the values to a new node
     // otherwise, copy the node and spill over
-    pub fn cons(value: T, mut cdr: UnrolledList<T, C, S>) -> UnrolledList<T, C, S> {
+    fn cons(value: T, mut cdr: UnrolledList<T, C, S>) -> UnrolledList<T, C, S> {
         if cdr.0.full || cdr.elements().len() > CAPACITY - 1 {
             UnrolledList(S::RC::new(UnrolledCell {
                 index: 1,
