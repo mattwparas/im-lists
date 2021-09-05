@@ -175,11 +175,11 @@ proptest! {
 
     }
 
-    // #[test]
-    // fn into_iter_equal(vec in vec_strategy()) {
-    //     let list: List<usize> = vec.clone().into();
-    //     assert!(Iterator::eq((&list).into_iter(), (&vec).into_iter()))
-    // }
+    #[test]
+    fn into_iter_equal(vec in vec_strategy()) {
+        let list: List<usize> = vec.clone().into();
+        assert!(Iterator::eq((&list).into_iter(), (&vec).into_iter()))
+    }
 }
 
 fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {

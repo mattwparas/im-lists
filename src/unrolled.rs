@@ -631,23 +631,23 @@ impl<
 }
 
 // and we'll implement IntoIterator
-impl<
-        T: Clone,
-        C: SmartPointerConstructor<Vec<T>>,
-        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
-    > IntoIterator for &UnrolledList<T, C, S>
-{
-    type Item = T;
-    type IntoIter = Iter<Self::Item, C, S>;
+// impl<
+//         T: Clone,
+//         C: SmartPointerConstructor<Vec<T>>,
+//         S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+//     > IntoIterator for &UnrolledList<T, C, S>
+// {
+//     type Item = T;
+//     type IntoIter = Iter<Self::Item, C, S>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        Iter {
-            index: self.0.index,
-            cur: Some(self.clone()),
-            _inner: PhantomData,
-        }
-    }
-}
+//     fn into_iter(self) -> Self::IntoIter {
+//         Iter {
+//             index: self.0.index,
+//             cur: Some(self.clone()),
+//             _inner: PhantomData,
+//         }
+//     }
+// }
 
 pub struct IterWrapper<
     'a,
@@ -675,24 +675,24 @@ impl<
     }
 }
 
-// impl<
-//         'a,
-//         T: Clone,
-//         C: SmartPointerConstructor<Vec<T>>,
-//         S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
-//     > IntoIterator for &'a UnrolledList<T, C, S>
-// {
-//     type Item = &'a T;
-//     type IntoIter = IterWrapper<'a, T, C, S>;
+impl<
+        'a,
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > IntoIterator for &'a UnrolledList<T, C, S>
+{
+    type Item = &'a T;
+    type IntoIter = IterWrapper<'a, T, C, S>;
 
-//     fn into_iter(self) -> Self::IntoIter {
-//         IterWrapper {
-//             inner: self
-//                 .node_iter()
-//                 .flat_map(|x| x.elements()[0..x.index()].into_iter().rev()),
-//         }
-//     }
-// }
+    fn into_iter(self) -> Self::IntoIter {
+        IterWrapper {
+            inner: self
+                .node_iter()
+                .flat_map(|x| x.elements()[0..x.index()].into_iter().rev()),
+        }
+    }
+}
 
 // and we'll implement FromIterator
 impl<
