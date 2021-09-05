@@ -9,9 +9,6 @@ use std::marker::PhantomData;
 
 const CAPACITY: usize = 256;
 
-pub struct List<T: Clone>(UnrolledList<T, RcConstructor, RcConstructor>);
-pub struct SharedList<T: Clone>(UnrolledList<T, ArcConstructor, ArcConstructor>);
-
 #[derive(Clone)]
 pub struct UnrolledList<
     T: Clone,
@@ -232,16 +229,16 @@ impl<
     // }
 
     // See what the perf is of this
-    pub fn into_test_iter(self) -> impl Iterator<Item = T> {
-        self.into_node_iter().flat_map(|mut x| {
-            let cell = S::make_mut(&mut x.0);
-            let vec = C::make_mut(&mut cell.elements);
-            let elements = std::mem::take(vec);
-            elements.into_iter().rev()
-        })
+    // fn into_test_iter(self) -> impl Iterator<Item = T> {
+    //     self.into_node_iter().flat_map(|mut x| {
+    //         let cell = S::make_mut(&mut x.0);
+    //         let vec = C::make_mut(&mut cell.elements);
+    //         let elements = std::mem::take(vec);
+    //         elements.into_iter().rev()
+    //     })
 
-        // todo!()
-    }
+    //     // todo!()
+    // }
 
     // Every node must have either CAPACITY elements, or be marked as full
     // Debateable whether I want them marked as full
