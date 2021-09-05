@@ -173,13 +173,13 @@ proptest! {
         assert_eq!(list.last(), vec.last().cloned());
     }
 
-    #[test]
-    fn iterators_equal(vec in vec_strategy()) {
-        let list: List<usize> = vec.into();
+    // #[test]
+    // fn iterators_equal(vec in vec_strategy()) {
+    //     let list: List<usize> = vec.into();
 
-        assert!(Iterator::eq(list.iter(), list.test_iter()));
+    //     assert!(Iterator::eq(list.iter(), list.test_iter()));
 
-    }
+    // }
 
     #[test]
     fn into_iter_equal(vec in vec_strategy()) {
@@ -192,6 +192,11 @@ proptest! {
         let initial = list.clone();
         let resulting = list.reverse().reverse();
         assert!(Iterator::eq(initial.into_iter(), resulting.into_iter()));
+    }
+
+    #[test]
+    fn iterators_equivalent(list in list_strategy_from_iterator()) {
+        assert!(Iterator::eq(list.iter(), (&list).into_iter()));
     }
 }
 

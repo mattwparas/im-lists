@@ -48,14 +48,10 @@ pub trait SmartPointer: Clone {
 
     fn new(obj: Self::Target) -> Self;
     fn strong_count(this: &Self) -> usize;
-
     fn try_unwrap(this: Self) -> Option<Self::Target>;
     fn get_mut(this: &mut Self) -> Option<&mut Self::Target>;
-    // fn make_mut(this: &mut Self) -> &mut Self::Target;
     fn ptr_eq(this: &Self, other: &Self) -> bool;
     fn as_ptr(this: &Self) -> *const Self::Target;
-
-    fn get_mut_unchecked(this: &mut Self) -> Option<&mut Self::Target>;
 }
 
 // Avoid creating infinite types by using an additional trait to provide some
@@ -71,8 +67,6 @@ pub trait SmartPointerConstructor<T>: Clone {
     where
         T: Clone;
 }
-
-// trait Clone
 
 impl<T> SmartPointer for Rc<T> {
     type Target = T;
@@ -93,31 +87,12 @@ impl<T> SmartPointer for Rc<T> {
         Rc::get_mut(this)
     }
 
-    // fn make_mut(this: &mut Self) -> &mut Self::Target {
-    //     // Rc::make_mut(self)
-    //     todo!()
-    // }
-
     fn ptr_eq(this: &Self, other: &Self) -> bool {
         Rc::ptr_eq(this, other)
     }
 
     fn as_ptr(this: &Self) -> *const Self::Target {
         Rc::as_ptr(this)
-    }
-
-    fn get_mut_unchecked(this: &mut Self) -> Option<&mut Self::Target> {
-        // todo!()
-
-        // unsafe { &mut (Rc::as_ptr(self).value}
-
-        unsafe { (Rc::as_ptr(this) as *mut T).as_mut() }
-
-        // pub unsafe fn get_mut_unchecked(this: &mut Self) -> &mut T {
-        //     // We are careful to *not* create a reference covering the "count" fields, as
-        //     // this would conflict with accesses to the reference counts (e.g. by `Weak`).
-        //     unsafe { &mut (*this.ptr.as_ptr()).value }
-        // }
     }
 }
 
@@ -140,10 +115,6 @@ impl<T> SmartPointer for Arc<T> {
         Arc::get_mut(this)
     }
 
-    // fn make_mut(this: &mut Self) -> &mut Self::Target {
-    //     todo!()
-    // }
-
     fn ptr_eq(this: &Self, other: &Self) -> bool {
         Arc::ptr_eq(this, other)
     }
@@ -151,49 +122,4 @@ impl<T> SmartPointer for Arc<T> {
     fn as_ptr(this: &Self) -> *const Self::Target {
         Arc::as_ptr(this)
     }
-
-    fn get_mut_unchecked(this: &mut Self) -> Option<&mut Self::Target> {
-        unsafe { (Arc::as_ptr(this) as *mut T).as_mut() }
-    }
 }
-
-// impl<T: Clone> SmartPointer for Box<T> {
-//     type Target = T;
-
-//     fn new(obj: Self::Target) -> Self {
-//         Box::new(obj)
-//     }
-
-//     fn strong_count(this: &Self) -> usize {
-//         1
-//     }
-
-//     fn unwrap(&self) -> Self::Target {
-//         // *self.clone()
-//         todo!()
-//     }
-
-//     fn try_unwrap(this: Self) -> Option<Self::Target> {
-//         todo!()
-//     }
-
-//     fn get_mut(this: &mut Self) -> Option<&mut Self::Target> {
-//         todo!()
-//     }
-
-//     // fn make_mut(this: &mut Self) -> &mut Self::Target {
-//     //     todo!()
-//     // }
-
-//     fn ptr_eq(this: &Self, other: &Self) -> bool {
-//         todo!()
-//     }
-
-//     fn as_ptr(this: &self) -> *const Self::Target {
-//         todo!()
-//     }
-
-//     fn get_mut_unchecked(this: &mut Self) -> Option<&mut Self::Target> {
-//         todo!()
-//     }
-// }
