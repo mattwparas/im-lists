@@ -59,7 +59,7 @@ fn unrolled_test_iter(c: &mut Criterion) {
     let list = (0..100000usize).into_iter().collect::<RcList<_>>();
     c.bench_function("unrolled-test-iter", |b| {
         b.iter(|| {
-            black_box(list.test_iter().cloned().sum::<usize>());
+            black_box(list.test_iter().sum::<usize>());
         })
     });
 }

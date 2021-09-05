@@ -97,7 +97,17 @@ impl<
     }
 
     pub fn cons_mut(&mut self, value: T) {
+        let index = self.0.index;
+        if self.0.index < self.elements().len() {
+            // println!("Inside cons_mut here!");
+            // reference.truncate(self.index);
+            C::make_mut(&mut S::make_mut(&mut self.0).elements).truncate(index);
+        }
+
+        // TODO cdr here is an issue - only moves the offset, no way to know that its full
+        // Cause its not actually full
         if self.0.full || self.elements().len() > CAPACITY - 1 {
+            println!("Case 1: {}, {}", self.0.full, self.elements().len());
             // Make dummy node
             // return reference to this new node
             let mut default = UnrolledList(S::RC::new(UnrolledCell {
@@ -109,6 +119,7 @@ impl<
 
             std::mem::swap(self, &mut default);
         } else {
+            // println!("Case 2");
             // println!("#### before: {:?}", self.elements());
 
             let inner = S::make_mut(&mut self.0);
@@ -188,13 +199,25 @@ impl<
     // Consuming iterators
     pub fn test_iter<'a>(&'a self) -> impl Iterator<Item = &'a T> {
         self.node_iter()
-            .flat_map(|x| x.elements().into_iter().rev())
+            .flat_map(|x| x.elements()[0..x.index()].into_iter().rev())
     }
 
-    // pub fn into_test_iter(self) -> impl Iterator<Item = T> {
-    //     self.into_node_iter()
-    //         .flat_map(|x| x.0.clone().elements.iter().cloned())
+    // pub fn get_type<'a>(&'a self) {
+    //     self.node_iter()
+    //         .flat_map(|x| x.elements()[0..x.index()].into_iter().rev())
     // }
+
+    // See what the perf is of this
+    pub fn into_test_iter(self) -> impl Iterator<Item = T> {
+        self.into_node_iter().flat_map(|mut x| {
+            let cell = S::make_mut(&mut x.0);
+            let vec = C::make_mut(&mut cell.elements);
+            let elements = std::mem::take(vec);
+            elements.into_iter().rev()
+        })
+
+        // todo!()
+    }
 
     // Every node must have either CAPACITY elements, or be marked as full
     // Debateable whether I want them marked as full
@@ -228,6 +251,10 @@ impl<
 
     // Be able to in place mutate
     pub fn append_mut(&mut self, other: Self) {
+        if other.elements().is_empty() {
+            return;
+        }
+
         let mut default = UnrolledList::new();
         std::mem::swap(self, &mut default);
 
@@ -237,6 +264,10 @@ impl<
 
     // Functional append
     pub fn append(self, other: Self) -> Self {
+        if other.elements().is_empty() {
+            return self;
+        }
+
         self.into_node_iter()
             .into_iter()
             .chain(other.into_node_iter())
@@ -369,6 +400,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
 
     // TODO fix cdr
     pub fn cdr(&self) -> Option<UnrolledList<T, C, S>> {
+        println!("index: {}", self.index);
         if self.index > 1 {
             Some(UnrolledList(S::RC::new(self.advance_cursor())))
         } else {
@@ -381,7 +413,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
             index: self.index - 1,
             elements: C::RC::clone(&self.elements),
             next: self.next.clone(),
-            full: false,
+            full: self.full,
         }
     }
 
@@ -391,9 +423,11 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
 
         // If the cursor isn't pointing to the end, wipe out elements that aren't useful to us
         // anymore since we've copied the underlying vector
-        if self.index < reference.len() {
-            reference.truncate(self.index);
-        }
+        // TODO this is in the above level
+        // if self.index < reference.len() {
+        //     println!("Inside cons_mut here!");
+        //     reference.truncate(self.index);
+        // }
 
         reference.push(value);
 
@@ -615,6 +649,51 @@ impl<
     }
 }
 
+pub struct IterWrapper<
+    'a,
+    T: Clone,
+    C: SmartPointerConstructor<Vec<T>>,
+    S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+> {
+    inner: FlatMap<
+        NodeIterRef<'a, T, C, S>,
+        Rev<std::slice::Iter<'a, T>>,
+        fn(&'a UnrolledList<T, C, S>) -> Rev<std::slice::Iter<'a, T>>,
+    >,
+}
+
+impl<
+        'a,
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > Iterator for IterWrapper<'a, T, C, S>
+{
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+// impl<
+//         'a,
+//         T: Clone,
+//         C: SmartPointerConstructor<Vec<T>>,
+//         S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+//     > IntoIterator for &'a UnrolledList<T, C, S>
+// {
+//     type Item = &'a T;
+//     type IntoIter = IterWrapper<'a, T, C, S>;
+
+//     fn into_iter(self) -> Self::IntoIter {
+//         IterWrapper {
+//             inner: self
+//                 .node_iter()
+//                 .flat_map(|x| x.elements()[0..x.index()].into_iter().rev()),
+//         }
+//     }
+// }
+
 // and we'll implement FromIterator
 impl<
         T: Clone,
@@ -673,6 +752,7 @@ impl<
         rev_iter.next();
 
         for i in rev_iter {
+            // TODO need to truncate the front of this one
             let mut prev = nodes.pop().unwrap();
 
             if let Some(UnrolledList(cell)) = nodes.get_mut(i) {
@@ -687,6 +767,11 @@ impl<
                     // Drop the useless elements
                     if left_inner.index < left_vector.len() {
                         left_vector.truncate(left_inner.index);
+                    }
+
+                    // TODO
+                    if right_inner.index < right_vector.len() {
+                        right_vector.truncate(right_inner.index);
                     }
 
                     // Perform the actual move of the values
