@@ -219,27 +219,6 @@ impl<
             .flat_map(|x| x.elements()[0..x.index()].into_iter().rev())
     }
 
-    // pub fn get_type<'a>(&'a self) {
-    //     self.into_node_iter().flat_map(|mut x| {
-    //         let cell = S::make_mut(&mut x.0);
-    //         let vec = C::make_mut(&mut cell.elements);
-    //         let elements = std::mem::take(vec);
-    //         elements.into_iter().take(self.index).rev()
-    //     })
-    // }
-
-    // See what the perf is of this
-    // fn into_test_iter(self) -> impl Iterator<Item = T> {
-    //     self.into_node_iter().flat_map(|mut x| {
-    //         let cell = S::make_mut(&mut x.0);
-    //         let vec = C::make_mut(&mut cell.elements);
-    //         let elements = std::mem::take(vec);
-    //         elements.into_iter().rev()
-    //     })
-
-    //     // todo!()
-    // }
-
     // Every node must have either CAPACITY elements, or be marked as full
     // Debateable whether I want them marked as full
     pub fn assert_invariants(&self) -> bool {
@@ -330,12 +309,6 @@ impl<
     fn index(&self) -> usize {
         self.0.index
     }
-
-    // fn cons_mut(&mut self, value: T) {
-    //     // self.0.cons_mut(value)
-
-    //     todo!()
-    // }
 }
 
 // Don't blow the stack
