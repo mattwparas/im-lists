@@ -369,14 +369,6 @@ impl<T: Clone> IntoIterator for List<T> {
     }
 }
 
-#[test]
-fn test() {
-    let list = crate::list![1, 2, 3, 4, 5];
-    let vec = im_rc::vector![1, 2, 3, 4, 5];
-    println!("{:?}", list);
-    println!("{:?}", vec);
-}
-
 #[cfg(test)]
 mod api_tests {
     use super::*;

@@ -372,14 +372,6 @@ impl<T: Clone> IntoIterator for SharedList<T> {
     }
 }
 
-#[test]
-fn test() {
-    let list = crate::shared_list![1, 2, 3, 4, 5];
-    let vec = im_rc::vector![1, 2, 3, 4, 5];
-    println!("{:?}", list);
-    println!("{:?}", vec);
-}
-
 #[cfg(test)]
 mod api_tests {
     use super::*;

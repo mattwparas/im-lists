@@ -6,13 +6,6 @@ pub(crate) struct RcConstructor {}
 impl<T> SmartPointerConstructor<T> for RcConstructor {
     type RC = Rc<T>;
 
-    fn unwrap(ptr: &Self::RC) -> T
-    where
-        T: Clone,
-    {
-        (**ptr).clone()
-    }
-
     fn make_mut(ptr: &mut Self::RC) -> &mut T
     where
         T: Clone,
@@ -26,13 +19,6 @@ pub(crate) struct ArcConstructor {}
 
 impl<T> SmartPointerConstructor<T> for ArcConstructor {
     type RC = Arc<T>;
-
-    fn unwrap(ptr: &Self::RC) -> T
-    where
-        T: Clone,
-    {
-        (**ptr).clone()
-    }
 
     fn make_mut(ptr: &mut Self::RC) -> &mut T
     where
@@ -51,17 +37,12 @@ pub(crate) trait SmartPointer: Clone {
     fn try_unwrap(this: Self) -> Option<Self::Target>;
     fn get_mut(this: &mut Self) -> Option<&mut Self::Target>;
     fn ptr_eq(this: &Self, other: &Self) -> bool;
-    fn as_ptr(this: &Self) -> *const Self::Target;
 }
 
 // Avoid creating infinite types by using an additional trait to provide some
 // indirection
 pub(crate) trait SmartPointerConstructor<T>: Clone {
     type RC: SmartPointer<Target = T> + Deref<Target = T>;
-
-    fn unwrap(ptr: &Self::RC) -> T
-    where
-        T: Clone;
 
     fn make_mut(ptr: &mut Self::RC) -> &mut T
     where
@@ -90,10 +71,6 @@ impl<T> SmartPointer for Rc<T> {
     fn ptr_eq(this: &Self, other: &Self) -> bool {
         Rc::ptr_eq(this, other)
     }
-
-    fn as_ptr(this: &Self) -> *const Self::Target {
-        Rc::as_ptr(this)
-    }
 }
 
 impl<T> SmartPointer for Arc<T> {
@@ -117,9 +94,5 @@ impl<T> SmartPointer for Arc<T> {
 
     fn ptr_eq(this: &Self, other: &Self) -> bool {
         Arc::ptr_eq(this, other)
-    }
-
-    fn as_ptr(this: &Self) -> *const Self::Target {
-        Arc::as_ptr(this)
     }
 }
