@@ -5,7 +5,7 @@ use crate::{
     unrolled::{ConsumingWrapper, IterWrapper, UnrolledList},
 };
 
-/// A persistent, immutable List.
+/// A persistent List.
 ///
 /// This list is suitable for a single threaded environment. If you would like an immutable list that can be shared
 /// across threads (i.e., is [`Send`] + [`Sync`], see [`SharedList`](crate::shared_list::SharedList)).
