@@ -1,5 +1,8 @@
 use std::iter::FromIterator;
 
+// #[cfg(test)]
+// use crate::public_api_tests;
+
 use crate::{
     shared::ArcConstructor,
     unrolled::{ConsumingWrapper, IterWrapper, UnrolledList},
@@ -359,4 +362,11 @@ fn test() {
     let vec = im_rc::vector![1, 2, 3, 4, 5];
     println!("{:?}", list);
     println!("{:?}", vec);
+}
+
+#[cfg(test)]
+mod api_tests {
+    use super::*;
+
+    public_api_tests!(shared_list_api_tests, SharedList, shared_list);
 }

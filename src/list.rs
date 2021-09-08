@@ -360,3 +360,9 @@ fn test() {
     println!("{:?}", list);
     println!("{:?}", vec);
 }
+
+#[cfg(test)]
+mod api_tests {
+    use super::*;
+    public_api_tests!(list_api_tests, List, list);
+}

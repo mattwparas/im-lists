@@ -2,6 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use im_lists::unrolled::{ArcList, RcList};
 
 use im_rc::Vector;
+use std::collections::LinkedList;
 
 macro_rules! iteration {
     (size = $number:expr, $(($func_name:ident, $type:ty)),* $(,)?) => {
@@ -151,7 +152,8 @@ iteration! {
     (unrolled_rc_iteration, RcList<_>),
     (unrolled_arc_iteration, ArcList<_>),
     (immutable_vector_iteration, Vector<_>),
-    (vec_iteration, Vec<_>)
+    (vec_iteration, Vec<_>),
+    (linked_list_iteration, LinkedList<_>)
 }
 
 construction! {
@@ -178,6 +180,7 @@ criterion_group!(
     unrolled_test_iter_two,
     unrolled_test_iter_three,
     unrolled_test_list,
+    linked_list_iteration,
     // unrolled_test_iter_four,
     // vec_one,
     // vec_two
