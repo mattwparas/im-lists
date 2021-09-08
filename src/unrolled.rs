@@ -9,6 +9,18 @@ use std::marker::PhantomData;
 
 const CAPACITY: usize = 256;
 
+pub type ConsumingIter<T, C, S> = FlatMap<
+    NodeIter<T, C, S>,
+    Rev<std::iter::Take<std::vec::IntoIter<T>>>,
+    fn(UnrolledList<T, C, S>) -> Rev<std::iter::Take<std::vec::IntoIter<T>>>,
+>;
+
+type RefIter<'a, T, C, S> = FlatMap<
+    NodeIterRef<'a, T, C, S>,
+    Rev<std::slice::Iter<'a, T>>,
+    fn(&'a UnrolledList<T, C, S>) -> Rev<std::slice::Iter<'a, T>>,
+>;
+
 #[derive(Clone)]
 pub struct UnrolledList<
     T: Clone,
@@ -24,7 +36,18 @@ impl<
     > PartialEq for UnrolledList<T, C, S>
 {
     fn eq(&self, other: &Self) -> bool {
-        Iterator::eq(self.into_iter(), other.into_iter())
+        Iterator::eq(self.iter(), other.iter())
+    }
+}
+
+impl<
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > Default for UnrolledList<T, C, S>
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -71,7 +94,7 @@ impl<
             inner.next = None;
         }
 
-        while let Some(mut right) = node_iter.next() {
+        for mut right in node_iter {
             let cell = S::make_mut(&mut right.0);
             let elements_mut = C::make_mut(&mut cell.elements);
 
@@ -174,15 +197,15 @@ impl<
         &self.0.elements
     }
 
-    fn at_capacity(&self) -> bool {
-        self.0.full || self.0.elements.len() == CAPACITY
-    }
+    // fn at_capacity(&self) -> bool {
+    //     self.0.full || self.0.elements.len() == CAPACITY
+    // }
 
     fn does_node_satisfy_invariant(&self) -> bool {
         self.0.full || self.elements().len() <= CAPACITY
     }
 
-    fn assert_list_invariants(&self) {
+    pub fn assert_list_invariants(&self) {
         assert!(self.does_node_satisfy_invariant())
     }
 
@@ -205,7 +228,7 @@ impl<
         }
     }
 
-    fn node_iter<'a>(&'a self) -> NodeIterRef<'a, T, C, S> {
+    fn node_iter(&self) -> NodeIterRef<'_, T, C, S> {
         NodeIterRef {
             cur: Some(self),
             _inner: PhantomData,
@@ -214,16 +237,31 @@ impl<
 
     // TODO investigate using this for the other iterators and see if its faster
     // Consuming iterators
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T> {
+    pub fn iter(&self) -> impl Iterator<Item = &'_ T> {
         self.node_iter()
-            .flat_map(|x| x.elements()[0..x.index()].into_iter().rev())
+            .flat_map(|x| x.elements()[0..x.index()].iter().rev())
+    }
+
+    #[inline(always)]
+    pub fn test_iter(&self) -> RefIter<'_, T, C, S> {
+        // IterWrapper(
+        self.node_iter()
+            .flat_map(|x| x.elements()[0..x.index()].iter().rev())
+        // )
+    }
+
+    #[inline(always)]
+    pub fn test_into_iter(&self) -> impl IntoIterator<Item = &'_ T> {
+        // IterWrapper(
+        self.node_iter()
+            .flat_map(|x| x.elements()[0..x.index()].iter().rev())
+        // )
     }
 
     // Every node must have either CAPACITY elements, or be marked as full
     // Debateable whether I want them marked as full
     pub fn assert_invariants(&self) -> bool {
-        self.node_iter()
-            .all(|x| Self::does_node_satisfy_invariant(&x))
+        self.node_iter().all(Self::does_node_satisfy_invariant)
     }
 
     // TODO document time complexity of this
@@ -283,7 +321,7 @@ impl<
     }
 
     // Figure out how you sort this
-    pub fn sort_by<F>(&mut self, cmp: F)
+    pub fn sort_by<F>(&mut self, _cmp: F)
     where
         F: Fn(&T, &T) -> Ordering,
     {
@@ -292,7 +330,7 @@ impl<
 
     // Append single value (?)
     // Its super bad and not sure that I would want to support it but here we are
-    pub fn push_back(&mut self, value: T) {
+    pub fn push_back(&mut self, _value: T) {
         todo!()
     }
 
@@ -489,6 +527,41 @@ impl<
     }
 }
 
+// TODO have this expose tryfold
+pub struct ConsumingWrapper<
+    T: Clone,
+    C: SmartPointerConstructor<Vec<T>>,
+    S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+>(ConsumingIter<T, C, S>);
+
+impl<
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > Iterator for ConsumingWrapper<T, C, S>
+{
+    type Item = T;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+
+    #[inline(always)]
+    fn fold<B, F>(self, init: B, f: F) -> B
+    where
+        Self: Sized,
+        F: FnMut(B, Self::Item) -> B,
+    {
+        self.0.fold(init, f)
+    }
+}
+
 impl<
         T: Clone,
         C: SmartPointerConstructor<Vec<T>>,
@@ -496,19 +569,52 @@ impl<
     > IntoIterator for UnrolledList<T, C, S>
 {
     type Item = T;
-    type IntoIter = FlatMap<
-        NodeIter<T, C, S>,
-        Rev<std::iter::Take<std::vec::IntoIter<T>>>,
-        fn(UnrolledList<T, C, S>) -> Rev<std::iter::Take<std::vec::IntoIter<T>>>,
-    >;
+    type IntoIter = ConsumingWrapper<T, C, S>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.into_node_iter().flat_map(move |mut x| {
+        ConsumingWrapper(self.into_node_iter().flat_map(move |mut x| {
             let cell = S::make_mut(&mut x.0);
             let vec = C::make_mut(&mut cell.elements);
             let elements = std::mem::take(vec);
             elements.into_iter().take(x.index()).rev()
-        })
+        }))
+    }
+}
+
+// TODO have this also expose TryFold
+pub struct IterWrapper<
+    'a,
+    T: Clone,
+    C: SmartPointerConstructor<Vec<T>>,
+    S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+>(RefIter<'a, T, C, S>);
+
+impl<
+        'a,
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > Iterator for IterWrapper<'a, T, C, S>
+{
+    type Item = &'a T;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+
+    #[inline(always)]
+    fn fold<B, F>(self, init: B, f: F) -> B
+    where
+        Self: Sized,
+        F: FnMut(B, Self::Item) -> B,
+    {
+        self.0.fold(init, f)
     }
 }
 
@@ -520,20 +626,39 @@ impl<
     > IntoIterator for &'a UnrolledList<T, C, S>
 {
     type Item = &'a T;
-    type IntoIter = FlatMap<
-        NodeIterRef<'a, T, C, S>,
-        Rev<std::slice::Iter<'a, T>>,
-        fn(&'a UnrolledList<T, C, S>) -> Rev<std::slice::Iter<'a, T>>,
-    >;
+    type IntoIter = IterWrapper<'a, T, C, S>;
+    // type IntoIter = RefIter<'a, T, C, S>;
 
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
-        self.node_iter()
-            .flat_map(|x| x.elements()[0..x.index()].into_iter().rev())
+        IterWrapper(
+            self.node_iter()
+                .flat_map(|x| x.elements()[0..x.index()].iter().rev()),
+            // self.test_iter(),
+        )
+        // self.test_iter()
     }
 }
 
+// impl<
+//         'a,
+//         T: Clone,
+//         C: SmartPointerConstructor<Vec<T>>,
+//         S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+//     > IntoIterator for &'a UnrolledList<T, C, S>
+// {
+//     type Item = &'a T;
+//     type IntoIter = RefIter<'a, T, C, S>
+
+//     #[inline(always)]
+//     fn into_iter(self) -> Self::IntoIter {
+//         self.node_iter()
+//             .flat_map(|x| x.elements()[0..x.index()].into_iter().rev())
+//     }
+// }
+
 // and we'll implement FromIterator
+// TODO specialize this for the into version?
 impl<
         T: Clone,
         C: SmartPointerConstructor<Vec<T>>,
@@ -573,7 +698,7 @@ impl<
             }
         }
 
-        pairs.pop().unwrap_or(Self::new())
+        pairs.pop().unwrap_or_else(Self::new)
     }
 }
 
@@ -632,7 +757,7 @@ impl<
             }
         }
 
-        nodes.pop().unwrap_or(Self::new())
+        nodes.pop().unwrap_or_else(Self::new)
     }
 }
 
@@ -656,6 +781,17 @@ impl<
 {
     fn from(vec: Vec<T>) -> Self {
         vec.into_iter().collect()
+    }
+}
+
+impl<
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > From<&[T]> for UnrolledList<T, C, S>
+{
+    fn from(vec: &[T]) -> Self {
+        vec.into_iter().cloned().collect()
     }
 }
 
@@ -705,6 +841,7 @@ mod tests {
 
 #[cfg(test)]
 mod iterator_tests {
+
     use super::*;
 
     #[test]
@@ -877,7 +1014,7 @@ mod iterator_tests {
 
     #[test]
     fn testing_iteration_duration() {
-        use std::time::{Duration, Instant};
+        use std::time::Instant;
 
         let list = (0..100000).into_iter().collect::<RcList<_>>();
 

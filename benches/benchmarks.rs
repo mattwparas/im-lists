@@ -67,19 +67,84 @@ fn unrolled_test_iter_two(c: &mut Criterion) {
     let list = (0..100000usize).into_iter().collect::<RcList<_>>();
     c.bench_function("unrolled-test-iter-two", |b| {
         b.iter(|| {
+            // black_box({
+            //     let mut x = 0;
+            //     for value in list.iter() {
+            //         x += value;
+            //     }
+            // });
+
             black_box(list.iter().sum::<usize>());
+            // black_box(list.iter().fold(0, |a, b| a + b));
+        })
+    });
+}
+
+fn unrolled_test_list(c: &mut Criterion) {
+    let list = (0..100000usize)
+        .into_iter()
+        .collect::<im_lists::list::List<_>>();
+    c.bench_function("unrolled-test-list", |b| {
+        b.iter(|| {
+            // black_box({
+            //     let mut x = 0;
+            //     for value in list.iter() {
+            //         x += value;
+            //     }
+            // });
+
+            black_box(list.iter().sum::<usize>());
+            // black_box(list.iter().fold(0, |a, b| a + b));
         })
     });
 }
 
 fn unrolled_test_iter_three(c: &mut Criterion) {
     let list = (0..100000usize).into_iter().collect::<RcList<_>>();
+    let list_ref = &list;
     c.bench_function("unrolled-test-iter-three", |b| {
         b.iter(|| {
-            black_box((&list).into_iter().sum::<usize>());
+            // black_box({
+            //     let mut x = 0;
+            //     for value in list_ref.into_iter() {
+            //         x += value;
+            //     }
+            // });
+
+            black_box(list_ref.into_iter().sum::<usize>());
+            // black_box(list_ref.into_iter().fold(0, |a, b| a + b));
         })
     });
 }
+
+// fn unrolled_test_iter_four(c: &mut Criterion) {
+//     let list = (0..100000usize).into_iter().collect::<RcList<_>>();
+//     c.bench_function("unrolled-test-iter-four", |b| {
+//         b.iter(|| {
+//             black_box(list.test_iter().sum::<usize>());
+//         })
+//     });
+// }
+
+// fn vec_one(c: &mut Criterion) {
+//     let list = (0..100000usize).into_iter().collect::<Vec<_>>();
+//     let list_ref = &list;
+//     c.bench_function("vec-test-one", |b| {
+//         b.iter(|| {
+//             black_box(list_ref.into_iter().sum::<usize>());
+//         })
+//     });
+// }
+
+// fn vec_two(c: &mut Criterion) {
+//     let list = (0..100000usize).into_iter().collect::<Vec<_>>();
+//     let list_ref = &list;
+//     c.bench_function("vec-test-two", |b| {
+//         b.iter(|| {
+//             black_box(list.iter().sum::<usize>());
+//         })
+//     });
+// }
 
 iteration! {
     size = 100000usize,
@@ -111,7 +176,11 @@ criterion_group!(
     cons_up_list,
     // unrolled_test_iter,
     unrolled_test_iter_two,
-    unrolled_test_iter_three
+    unrolled_test_iter_three,
+    unrolled_test_list,
+    // unrolled_test_iter_four,
+    // vec_one,
+    // vec_two
 );
 
 criterion_main!(benches);
