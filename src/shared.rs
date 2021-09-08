@@ -1,7 +1,7 @@
 use std::{ops::Deref, rc::Rc, sync::Arc};
 
 #[derive(Clone, PartialEq)]
-pub struct RcConstructor {}
+pub(crate) struct RcConstructor {}
 
 impl<T> SmartPointerConstructor<T> for RcConstructor {
     type RC = Rc<T>;
@@ -22,7 +22,7 @@ impl<T> SmartPointerConstructor<T> for RcConstructor {
 }
 
 #[derive(Clone)]
-pub struct ArcConstructor {}
+pub(crate) struct ArcConstructor {}
 
 impl<T> SmartPointerConstructor<T> for ArcConstructor {
     type RC = Arc<T>;
@@ -43,7 +43,7 @@ impl<T> SmartPointerConstructor<T> for ArcConstructor {
 }
 
 // Definition and impls for RefCounted
-pub trait SmartPointer: Clone {
+pub(crate) trait SmartPointer: Clone {
     type Target;
 
     fn new(obj: Self::Target) -> Self;
@@ -56,7 +56,7 @@ pub trait SmartPointer: Clone {
 
 // Avoid creating infinite types by using an additional trait to provide some
 // indirection
-pub trait SmartPointerConstructor<T>: Clone {
+pub(crate) trait SmartPointerConstructor<T>: Clone {
     type RC: SmartPointer<Target = T> + Deref<Target = T>;
 
     fn unwrap(ptr: &Self::RC) -> T

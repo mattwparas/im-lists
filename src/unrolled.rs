@@ -371,7 +371,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
 }
 
 #[derive(Clone)]
-pub struct UnrolledCell<
+pub(crate) struct UnrolledCell<
     T: Clone,
     S: SmartPointerConstructor<Self>,
     C: SmartPointerConstructor<Vec<T>>,
@@ -531,7 +531,7 @@ impl<
 }
 
 // TODO have this expose tryfold
-pub struct ConsumingWrapper<
+pub(crate) struct ConsumingWrapper<
     T: Clone,
     C: SmartPointerConstructor<Vec<T>>,
     S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
@@ -585,7 +585,7 @@ impl<
 }
 
 // TODO have this also expose TryFold
-pub struct IterWrapper<
+pub(crate) struct IterWrapper<
     'a,
     T: Clone,
     C: SmartPointerConstructor<Vec<T>>,

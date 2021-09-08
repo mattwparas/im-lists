@@ -4,9 +4,9 @@
 #[macro_use]
 pub(crate) mod macros;
 pub mod list;
-pub mod shared;
+pub(crate) mod shared;
 pub mod shared_list;
-pub mod unrolled;
+pub(crate) mod unrolled;
 
 #[macro_export]
 macro_rules! list {
