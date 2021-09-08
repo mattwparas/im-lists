@@ -1,5 +1,6 @@
 // Code coverage doesn't pick up doc tests, duplicate these down here
 // just to make sure no obvious regressions happen.
+#[cfg(test)]
 macro_rules! public_api_tests {
     ($mod_name:tt, $type:tt, $list_macro:tt) => {
         use crate::$list_macro;
@@ -133,6 +134,100 @@ macro_rules! public_api_tests {
             let list = $list_macro![1usize, 2, 3];
             let vec = vec![4, 5, 6];
             assert_eq!(list.extend(vec), $list_macro![1, 2, 3, 4, 5, 6])
+        }
+    };
+}
+
+macro_rules! impl_iter {
+    () => {
+        #[inline(always)]
+        fn next(&mut self) -> Option<Self::Item> {
+            self.0.next()
+        }
+
+        #[inline(always)]
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.0.size_hint()
+        }
+
+        #[inline(always)]
+        fn fold<B, F>(self, init: B, f: F) -> B
+        where
+            Self: Sized,
+            F: FnMut(B, Self::Item) -> B,
+        {
+            self.0.fold(init, f)
+        }
+    };
+}
+
+macro_rules! impl_traits {
+    ($list:tt, $rc_type:tt) => {
+        impl<T: Clone> Default for $list<T> {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
+        // and we'll implement FromIterator
+        impl<T: Clone> FromIterator<T> for $list<T> {
+            fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+                $list(iter.into_iter().collect())
+            }
+        }
+
+        impl<T: Clone> FromIterator<$list<T>> for $list<T> {
+            fn from_iter<I: IntoIterator<Item = $list<T>>>(iter: I) -> Self {
+                $list(iter.into_iter().map(|x| x.0).collect())
+            }
+        }
+
+        impl<T: Clone> From<Vec<T>> for $list<T> {
+            fn from(vec: Vec<T>) -> Self {
+                $list(vec.into_iter().collect())
+            }
+        }
+
+        impl<T: Clone + std::fmt::Debug> std::fmt::Debug for $list<T> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_list().entries(self).finish()
+            }
+        }
+
+        pub struct IterRef<'a, T: Clone>(IterWrapper<'a, T, $rc_type, $rc_type>);
+
+        impl<'a, T: Clone> Iterator for IterRef<'a, T> {
+            type Item = &'a T;
+
+            impl_iter!();
+        }
+
+        impl<'a, T: Clone> IntoIterator for &'a $list<T> {
+            type Item = &'a T;
+            type IntoIter = IterRef<'a, T>;
+
+            #[inline(always)]
+            fn into_iter(self) -> Self::IntoIter {
+                IterRef((&self.0).into_iter())
+            }
+        }
+
+        pub struct Iter<T: Clone>(ConsumingWrapper<T, $rc_type, $rc_type>);
+
+        impl<T: Clone> Iterator for Iter<T> {
+            type Item = T;
+
+            impl_iter!();
+        }
+
+        impl<T: Clone> IntoIterator for $list<T> {
+            type Item = T;
+            type IntoIter = Iter<T>;
+
+            #[inline(always)]
+            fn into_iter(self) -> Self::IntoIter {
+                Iter(self.0.into_iter())
+            }
         }
     };
 }

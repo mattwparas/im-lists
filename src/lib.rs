@@ -1,6 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-#[cfg(test)]
 #[macro_use]
 pub(crate) mod macros;
 pub mod list;
