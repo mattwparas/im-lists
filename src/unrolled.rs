@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod proptests;
 
-use crate::shared::{ArcConstructor, RcConstructor, SmartPointer, SmartPointerConstructor};
+use crate::shared::{SmartPointer, SmartPointerConstructor};
 use itertools::Itertools;
 use std::cmp::Ordering;
 use std::iter::{FlatMap, FromIterator, Rev};
@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 
 const CAPACITY: usize = 256;
 
-pub type ConsumingIter<T, C, S> = FlatMap<
+type ConsumingIter<T, C, S> = FlatMap<
     NodeIter<T, C, S>,
     Rev<std::iter::Take<std::vec::IntoIter<T>>>,
     fn(UnrolledList<T, C, S>) -> Rev<std::iter::Take<std::vec::IntoIter<T>>>,
@@ -22,7 +22,7 @@ type RefIter<'a, T, C, S> = FlatMap<
 >;
 
 #[derive(Clone)]
-pub struct UnrolledList<
+pub(crate) struct UnrolledList<
     T: Clone,
     C: SmartPointerConstructor<Vec<T>>,
     S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
@@ -201,11 +201,13 @@ impl<
     //     self.0.full || self.0.elements.len() == CAPACITY
     // }
 
+    #[cfg(test)]
     fn does_node_satisfy_invariant(&self) -> bool {
         self.0.full || self.elements().len() <= CAPACITY
     }
 
-    pub fn assert_list_invariants(&self) {
+    #[cfg(test)]
+    fn assert_list_invariants(&self) {
         assert!(self.does_node_satisfy_invariant())
     }
 
@@ -242,24 +244,25 @@ impl<
             .flat_map(|x| x.elements()[0..x.index()].iter().rev())
     }
 
-    #[inline(always)]
-    pub fn test_iter(&self) -> RefIter<'_, T, C, S> {
-        // IterWrapper(
-        self.node_iter()
-            .flat_map(|x| x.elements()[0..x.index()].iter().rev())
-        // )
-    }
+    // #[inline(always)]
+    // pub fn test_iter(&self) -> RefIter<'_, T, C, S> {
+    //     // IterWrapper(
+    //     self.node_iter()
+    //         .flat_map(|x| x.elements()[0..x.index()].iter().rev())
+    //     // )
+    // }
 
-    #[inline(always)]
-    pub fn test_into_iter(&self) -> impl IntoIterator<Item = &'_ T> {
-        // IterWrapper(
-        self.node_iter()
-            .flat_map(|x| x.elements()[0..x.index()].iter().rev())
-        // )
-    }
+    // #[inline(always)]
+    // pub fn test_into_iter(&self) -> impl IntoIterator<Item = &'_ T> {
+    //     // IterWrapper(
+    //     self.node_iter()
+    //         .flat_map(|x| x.elements()[0..x.index()].iter().rev())
+    //     // )
+    // }
 
     // Every node must have either CAPACITY elements, or be marked as full
     // Debateable whether I want them marked as full
+    #[cfg(test)]
     pub fn assert_invariants(&self) -> bool {
         self.node_iter().all(Self::does_node_satisfy_invariant)
     }
@@ -313,15 +316,15 @@ impl<
     }
 
     // Figure out how in the heck you sort this
-    pub fn sort(&mut self)
+    pub fn _sort(&mut self)
     where
         T: Ord,
     {
-        self.sort_by(Ord::cmp)
+        self._sort_by(Ord::cmp)
     }
 
     // Figure out how you sort this
-    pub fn sort_by<F>(&mut self, _cmp: F)
+    pub fn _sort_by<F>(&mut self, _cmp: F)
     where
         F: Fn(&T, &T) -> Ordering,
     {
@@ -330,7 +333,7 @@ impl<
 
     // Append single value (?)
     // Its super bad and not sure that I would want to support it but here we are
-    pub fn push_back(&mut self, _value: T) {
+    pub fn _push_back(&mut self, _value: T) {
         todo!()
     }
 
@@ -471,7 +474,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
     }
 }
 
-pub struct NodeIter<
+pub(crate) struct NodeIter<
     T: Clone,
     C: SmartPointerConstructor<Vec<T>>,
     S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
@@ -498,7 +501,7 @@ impl<
     }
 }
 
-pub struct NodeIterRef<
+pub(crate) struct NodeIterRef<
     'a,
     T: Clone,
     C: SmartPointerConstructor<Vec<T>>,
@@ -795,11 +798,12 @@ impl<
     }
 }
 
-pub type RcList<T> = UnrolledList<T, RcConstructor, RcConstructor>;
-pub type ArcList<T> = UnrolledList<T, ArcConstructor, ArcConstructor>;
-
 #[cfg(test)]
 mod tests {
+
+    use crate::shared::RcConstructor;
+
+    type RcList<T> = UnrolledList<T, RcConstructor, RcConstructor>;
 
     use super::*;
 
@@ -843,6 +847,9 @@ mod tests {
 mod iterator_tests {
 
     use super::*;
+    use crate::shared::RcConstructor;
+
+    type RcList<T> = UnrolledList<T, RcConstructor, RcConstructor>;
 
     #[test]
     fn basic_construction() {
@@ -1042,6 +1049,8 @@ mod iterator_tests {
 mod reference_counting_correctness {
 
     use super::*;
+    use crate::shared::RcConstructor;
+    type RcList<T> = UnrolledList<T, RcConstructor, RcConstructor>;
 
     #[derive(Clone)]
     enum Value {

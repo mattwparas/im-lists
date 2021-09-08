@@ -41,6 +41,16 @@ macro_rules! public_api_tests {
 
         #[test]
         fn cdr() {
+            let list = $list_macro![1, 2, 3, 4, 5];
+            let cdr = list.cdr().unwrap();
+            assert_eq!(cdr, $list_macro![2, 3, 4, 5]);
+            let list = $list_macro![5];
+            let cdr = list.cdr();
+            assert!(cdr.is_none());
+        }
+
+        #[test]
+        fn cdr_mut() {
             let mut list = $list_macro![1, 2, 3, 4, 5];
             list.cdr_mut().expect("This list has a tail");
             assert_eq!(list, $list_macro![2, 3, 4, 5]);
@@ -100,6 +110,14 @@ macro_rules! public_api_tests {
             let left = $list_macro![1usize, 2, 3];
             let right = $list_macro![4usize, 5, 6];
             assert_eq!(left.append(right), $list_macro![1, 2, 3, 4, 5, 6])
+        }
+
+        #[test]
+        fn append_mut() {
+            let mut left = $list_macro![1usize, 2, 3];
+            let right = $list_macro![4usize, 5, 6];
+            left.append_mut(right);
+            assert_eq!(left, $list_macro![1, 2, 3, 4, 5, 6])
         }
 
         #[test]

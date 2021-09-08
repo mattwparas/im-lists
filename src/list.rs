@@ -217,7 +217,7 @@ impl<T: Clone> List<T> {
         self.0.get(index)
     }
 
-    /// Append the list other to the end of the current list. Returns a new list.
+    /// Append the list `other` to the end of the current list. Returns a new list.
     ///
     /// # Examples
     ///
@@ -230,6 +230,22 @@ impl<T: Clone> List<T> {
     /// ```
     pub fn append(self, other: Self) -> Self {
         List(self.0.append(other.0))
+    }
+
+    /// Append the list 'other' to the end of the current list in place.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::list;
+    /// let mut left = list![1usize, 2, 3];
+    /// let right = list![4usize, 5, 6];
+    /// left.append_mut(right);
+    /// assert_eq!(left, list![1, 2, 3, 4, 5, 6])
+    /// ```
+    pub fn append_mut(&mut self, other: Self) {
+        self.0.append_mut(other.0);
     }
 
     /// Checks whether a list is empty

@@ -235,6 +235,22 @@ impl<T: Clone> SharedList<T> {
         SharedList(self.0.append(other.0))
     }
 
+    /// Append the list 'other' to the end of the current list in place.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::shared_list;
+    /// let mut left = shared_list![1usize, 2, 3];
+    /// let right = shared_list![4usize, 5, 6];
+    /// left.append_mut(right);
+    /// assert_eq!(left, shared_list![1, 2, 3, 4, 5, 6])
+    /// ```
+    pub fn append_mut(&mut self, other: Self) {
+        self.0.append_mut(other.0);
+    }
+
     /// Checks whether a list is empty
     ///
     /// # Examples

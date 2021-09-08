@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use im_lists::unrolled::{ArcList, RcList};
+use im_lists::{list::List, shared_list::SharedList};
 
 use im_rc::Vector;
 use std::collections::LinkedList;
@@ -34,8 +34,8 @@ fn cons_up_list(c: &mut Criterion) {
     c.bench_function("cons-unrolled-list", |b| {
         b.iter(|| {
             let iter = (0..10000usize).into_iter().rev();
-            let last = RcList::new();
-            black_box(iter.fold(last, |accum, next| RcList::cons(next, accum)))
+            let last = List::new();
+            black_box(iter.fold(last, |accum, next| List::cons(next, accum)))
         })
     });
 }
@@ -44,7 +44,7 @@ fn cdr_iteration(c: &mut Criterion) {
     c.bench_function("unrolled-cdr-iteration", |b| {
         b.iter(|| {
             black_box({
-                let mut list: Option<RcList<_>> = Some((0..10000usize).into_iter().collect());
+                let mut list: Option<List<_>> = Some((0..10000usize).into_iter().collect());
 
                 while let Some(car) = list.as_ref().map(|x| x.car()).flatten() {
                     black_box(car);
@@ -56,7 +56,7 @@ fn cdr_iteration(c: &mut Criterion) {
 }
 
 // fn unrolled_test_iter(c: &mut Criterion) {
-//     let list = (0..100000usize).into_iter().collect::<RcList<_>>();
+//     let list = (0..100000usize).into_iter().collect::<List<_>>();
 //     c.bench_function("unrolled-test-iter", |b| {
 //         b.iter(|| {
 //             black_box(list.test_iter().sum::<usize>());
@@ -65,7 +65,7 @@ fn cdr_iteration(c: &mut Criterion) {
 // }
 
 fn unrolled_test_iter_two(c: &mut Criterion) {
-    let list = (0..100000usize).into_iter().collect::<RcList<_>>();
+    let list = (0..100000usize).into_iter().collect::<List<_>>();
     c.bench_function("unrolled-test-iter-two", |b| {
         b.iter(|| {
             // black_box({
@@ -101,7 +101,7 @@ fn unrolled_test_list(c: &mut Criterion) {
 }
 
 fn unrolled_test_iter_three(c: &mut Criterion) {
-    let list = (0..100000usize).into_iter().collect::<RcList<_>>();
+    let list = (0..100000usize).into_iter().collect::<List<_>>();
     let list_ref = &list;
     c.bench_function("unrolled-test-iter-three", |b| {
         b.iter(|| {
@@ -119,7 +119,7 @@ fn unrolled_test_iter_three(c: &mut Criterion) {
 }
 
 // fn unrolled_test_iter_four(c: &mut Criterion) {
-//     let list = (0..100000usize).into_iter().collect::<RcList<_>>();
+//     let list = (0..100000usize).into_iter().collect::<List<_>>();
 //     c.bench_function("unrolled-test-iter-four", |b| {
 //         b.iter(|| {
 //             black_box(list.test_iter().sum::<usize>());
@@ -149,8 +149,8 @@ fn unrolled_test_iter_three(c: &mut Criterion) {
 
 iteration! {
     size = 100000usize,
-    (unrolled_rc_iteration, RcList<_>),
-    (unrolled_arc_iteration, ArcList<_>),
+    (unrolled_rc_iteration, List<_>),
+    (unrolled_arc_iteration, SharedList<_>),
     (immutable_vector_iteration, Vector<_>),
     (vec_iteration, Vec<_>),
     (linked_list_iteration, LinkedList<_>)
@@ -158,7 +158,7 @@ iteration! {
 
 construction! {
     size = 100000usize,
-    (unrolled_rc_construction, RcList<_>),
+    (unrolled_rc_construction, List<_>),
     (immutable_vector_construction, Vector<_>),
     (vec_construction, Vec<_>)
 }
