@@ -147,7 +147,7 @@ proptest! {
     fn indexing_correctly_lines_up(size in 0..10000usize) {
         let list = (0..size).into_iter().collect::<List<_>>();
         for i in 0..list.len() {
-            assert_eq!(i, list.get(i).unwrap());
+            assert_eq!(i, *list.get(i).unwrap());
         }
     }
 

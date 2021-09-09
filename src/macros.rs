@@ -113,7 +113,7 @@ macro_rules! public_api_tests {
         #[test]
         fn get() {
             let list = $list_macro![1, 2, 3, 4, 5];
-            assert_eq!(list.get(3), Some(4));
+            assert_eq!(list.get(3).cloned(), Some(4));
             assert!(list.get(1000).is_none());
         }
 
@@ -304,6 +304,12 @@ macro_rules! impl_traits {
             }
         }
 
+        impl<T: Clone + PartialEq> PartialEq for $list<T> {
+            fn eq(&self, other: &Self) -> bool {
+                self.iter().eq(other.iter())
+            }
+        }
+
         impl<T: Clone + Eq> Eq for $list<T> {}
 
         impl<T: Clone + PartialOrd> PartialOrd for $list<T> {
@@ -342,6 +348,32 @@ macro_rules! impl_traits {
                 I: Iterator<Item = Self>,
             {
                 it.fold(Self::new(), |a, b| a + b)
+            }
+        }
+
+        impl<T: Clone + std::hash::Hash> std::hash::Hash for $list<T> {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                for i in self {
+                    i.hash(state)
+                }
+            }
+        }
+
+        impl<T: Clone> std::ops::Index<usize> for $list<T> {
+            type Output = T;
+            /// Get a reference to the value at index `index` in the vector.
+            ///
+            /// Time: O(log n)
+            fn index(&self, index: usize) -> &Self::Output {
+                match self.get(index) {
+                    Some(value) => value,
+                    None => panic!(
+                        "{}::index: index out of bounds: {} < {}",
+                        stringify!($list),
+                        index,
+                        self.len()
+                    ),
+                }
             }
         }
     };

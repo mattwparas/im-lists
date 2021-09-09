@@ -26,7 +26,7 @@ use crate::{
 /// In addition, the unrolled linked list is able to avoid the costly cache misses that a typical linked list
 /// suffers from, seeing very realistic performance gains.
 
-#[derive(PartialEq, Clone)]
+#[derive(Clone)]
 pub struct SharedList<T: Clone>(UnrolledList<T, ArcConstructor, ArcConstructor>);
 
 impl<T: Clone> SharedList<T> {
@@ -235,7 +235,7 @@ impl<T: Clone> SharedList<T> {
 
     /// Get a reference to the value at index `index` in a list.
     /// Returns `None` if the index is out of bounds.
-    pub fn get(&self, index: usize) -> Option<T> {
+    pub fn get(&self, index: usize) -> Option<&T> {
         self.0.get(index)
     }
 

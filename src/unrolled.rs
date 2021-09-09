@@ -260,16 +260,16 @@ impl<
     // TODO document time complexity of this
     // Looks like its O(n / 64)
     // TODO make this not so bad - also how it works with half full nodes
-    pub fn get(&self, mut index: usize) -> Option<T> {
+    pub fn get(&self, mut index: usize) -> Option<&T> {
         if index < self.0.index {
-            return self.0.elements.get(self.0.index - index - 1).cloned();
+            self.0.elements.get(self.0.index - index - 1)
         } else {
             let mut cur = self.0.next.as_ref();
             index -= self.0.elements.len();
             while let Some(node) = cur {
                 if index < node.0.index {
                     let node_cap = node.0.index;
-                    return node.0.elements.get(node_cap - index - 1).cloned();
+                    return node.0.elements.get(node_cap - index - 1);
                 } else {
                     cur = node.0.next.as_ref();
                     index -= node.0.elements.len();
@@ -910,7 +910,7 @@ mod iterator_tests {
         assert_eq!(left.node_iter().count(), 4);
 
         // 300 should be at 300
-        assert_eq!(left.get(300).unwrap(), 300);
+        assert_eq!(*left.get(300).unwrap(), 300);
         left.assert_list_invariants();
     }
 
@@ -925,7 +925,7 @@ mod iterator_tests {
         let list: RcList<_> = (0..300).into_iter().collect();
 
         for i in 0..300 {
-            assert_eq!(list.get(i).unwrap(), i);
+            assert_eq!(*list.get(i).unwrap(), i);
         }
     }
 
@@ -964,7 +964,7 @@ mod iterator_tests {
         }
 
         for i in 0..1000 {
-            assert_eq!(i, list.get(i).unwrap());
+            assert_eq!(i, *list.get(i).unwrap());
         }
     }
 
