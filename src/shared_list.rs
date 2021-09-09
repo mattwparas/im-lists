@@ -275,7 +275,7 @@ impl<T: Clone> SharedList<T> {
     /// # use im_lists::shared_list;
     /// let mut list = shared_list![4, 2, 6, 3, 1, 5];
     /// list.sort();
-    /// assert_eq!(list, list![1, 2, 3, 4, 5, 6]);
+    /// assert_eq!(list, shared_list![1, 2, 3, 4, 5, 6]);
     /// ```
     pub fn sort(&mut self)
     where
@@ -292,7 +292,7 @@ impl<T: Clone> SharedList<T> {
     /// # use im_lists::shared_list;
     /// let mut list = shared_list![4, 2, 6, 3, 1, 5];
     /// list.sort_by(Ord::cmp);
-    /// assert_eq!(list, list![1, 2, 3, 4, 5, 6]);
+    /// assert_eq!(list, shared_list![1, 2, 3, 4, 5, 6]);
     /// ```
     pub fn sort_by<F>(&mut self, cmp: F)
     where

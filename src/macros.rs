@@ -136,6 +136,20 @@ macro_rules! public_api_tests {
             list.extend(vec);
             assert_eq!(list, $list_macro![1, 2, 3, 4, 5, 6])
         }
+
+        #[test]
+        fn sort() {
+            let mut list = $list_macro![5, 4, 3, 2, 1];
+            list.sort();
+            assert_eq!(list, $list_macro![1, 2, 3, 4, 5]);
+        }
+
+        #[test]
+        fn sort_by() {
+            let mut list = $list_macro![5, 4, 3, 2, 1];
+            list.sort_by(Ord::cmp);
+            assert_eq!(list, $list_macro![1, 2, 3, 4, 5]);
+        }
     };
 }
 
