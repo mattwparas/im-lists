@@ -170,6 +170,27 @@ macro_rules! public_api_tests {
             list.push_back(2);
             assert_eq!(list, $list_macro![0, 1, 2]);
         }
+
+        #[test]
+        fn add() {
+            let left = $list_macro![1, 2, 3, 4, 5];
+            let right = $list_macro![6, 7, 8, 9, 10];
+
+            assert_eq!(left + right, $list_macro![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        }
+
+        #[test]
+        fn sum() {
+            let list = vec![
+                $list_macro![1, 2, 3],
+                $list_macro![4, 5, 6],
+                $list_macro![7, 8, 9],
+            ];
+            assert_eq!(
+                list.into_iter().sum::<$type<_>>(),
+                $list_macro![1, 2, 3, 4, 5, 6, 7, 8, 9]
+            );
+        }
     };
 }
 
@@ -268,6 +289,53 @@ macro_rules! impl_traits {
             #[inline(always)]
             fn into_iter(self) -> Self::IntoIter {
                 Iter(self.0.into_iter())
+            }
+        }
+
+        impl<'a, T: 'a + Clone> FromIterator<&'a $list<T>> for $list<T> {
+            fn from_iter<I: IntoIterator<Item = &'a $list<T>>>(iter: I) -> Self {
+                iter.into_iter().cloned().collect()
+            }
+        }
+
+        impl<T: Clone> From<&[T]> for $list<T> {
+            fn from(vec: &[T]) -> Self {
+                vec.iter().cloned().collect()
+            }
+        }
+
+        impl<T: Clone + Eq> Eq for $list<T> {}
+
+        impl<T: Clone + Ord> Ord for $list<T> {
+            fn cmp(&self, other: &Self) -> Ordering {
+                self.iter().cmp(other.iter())
+            }
+        }
+
+        impl<T: Clone> std::ops::Add for $list<T> {
+            type Output = $list<T>;
+
+            /// Concatenate two lists
+            fn add(self, other: Self) -> Self::Output {
+                self.append(other)
+            }
+        }
+
+        impl<'a, T: Clone> std::ops::Add for &'a $list<T> {
+            type Output = $list<T>;
+
+            /// Concatenate two lists
+            fn add(self, other: Self) -> Self::Output {
+                self.clone().append(other.clone())
+            }
+        }
+
+        impl<T: Clone> std::iter::Sum for $list<T> {
+            fn sum<I>(it: I) -> Self
+            where
+                I: Iterator<Item = Self>,
+            {
+                it.fold(Self::new(), |a, b| a + b)
             }
         }
     };

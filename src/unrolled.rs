@@ -21,7 +21,7 @@ type RefIter<'a, T, C, S> = FlatMap<
     fn(&'a UnrolledList<T, C, S>) -> Rev<std::slice::Iter<'a, T>>,
 >;
 
-#[derive(Clone)]
+#[derive(Clone, Eq)]
 pub(crate) struct UnrolledList<
     T: Clone,
     C: SmartPointerConstructor<Vec<T>>,
@@ -39,6 +39,28 @@ impl<
         Iterator::eq(self.iter(), other.iter())
     }
 }
+
+impl<
+        T: Clone + PartialOrd,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > PartialOrd for UnrolledList<T, C, S>
+{
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.iter().partial_cmp(other.iter())
+    }
+}
+
+// impl<
+//         T: Clone + Ord,
+//         C: SmartPointerConstructor<Vec<T>>,
+//         S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+//     > Ord for UnrolledList<T, C, S>
+// {
+//     fn cmp(&self, other: &Self) -> Ordering {
+//         self.iter().cmp(other.iter())
+//     }
+// }
 
 impl<
         T: Clone,
@@ -197,10 +219,6 @@ impl<
         &self.0.elements
     }
 
-    // fn at_capacity(&self) -> bool {
-    //     self.0.full || self.0.elements.len() == CAPACITY
-    // }
-
     #[cfg(test)]
     fn does_node_satisfy_invariant(&self) -> bool {
         self.0.full || self.elements().len() <= CAPACITY
@@ -210,18 +228,6 @@ impl<
     fn assert_list_invariants(&self) {
         assert!(self.does_node_satisfy_invariant())
     }
-
-    // pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T> {
-    //     self.into_iter()
-    // }
-
-    // pub fn iter<'a>(&'a self) -> IterRef<'a, T, C, S> {
-    //     IterRef {
-    //         cur: Some(self),
-    //         index: self.0.index,
-    //         _inner: PhantomData,
-    //     }
-    // }
 
     fn into_node_iter(self) -> NodeIter<T, C, S> {
         NodeIter {
@@ -243,22 +249,6 @@ impl<
         self.node_iter()
             .flat_map(|x| x.elements()[0..x.index()].iter().rev())
     }
-
-    // #[inline(always)]
-    // pub fn test_iter(&self) -> RefIter<'_, T, C, S> {
-    //     // IterWrapper(
-    //     self.node_iter()
-    //         .flat_map(|x| x.elements()[0..x.index()].iter().rev())
-    //     // )
-    // }
-
-    // #[inline(always)]
-    // pub fn test_into_iter(&self) -> impl IntoIterator<Item = &'_ T> {
-    //     // IterWrapper(
-    //     self.node_iter()
-    //         .flat_map(|x| x.elements()[0..x.index()].iter().rev())
-    //     // )
-    // }
 
     // Every node must have either CAPACITY elements, or be marked as full
     // Debateable whether I want them marked as full
@@ -339,12 +329,6 @@ impl<
         self.extend(std::iter::once(value))
     }
 
-    // // Extend from an iterator over values
-    // // TODO optimize this otherwise
-    // pub fn extend_func(self, iter: impl IntoIterator<Item = T>) -> Self {
-    //     self.append(iter.into_iter().collect())
-    // }
-
     pub fn is_empty(&self) -> bool {
         self.0.elements.is_empty()
     }
@@ -383,6 +367,37 @@ pub(crate) struct UnrolledCell<
     next: Option<UnrolledList<T, C, S>>,
     full: bool,
 }
+
+// impl<
+//         T: Clone + PartialEq,
+//         S: SmartPointerConstructor<Self>,
+//         C: SmartPointerConstructor<Vec<T>>,
+//     > PartialEq for UnrolledCell<T, S, C>
+// {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.index == other.index
+//             && self.full == other.full
+//             && Iterator::eq(self.elements.iter(), other.elements.iter())
+//             && self.next == other.next
+//     }
+// }
+
+// impl<
+//         T: Clone + PartialOrd,
+//         S: SmartPointerConstructor<Self>,
+//         C: SmartPointerConstructor<Vec<T>>,
+//     > PartialOrd for UnrolledCell<T, S, C>
+// {
+//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//         todo!()
+//     }
+//     // fn eq(&self, other: &Self) -> bool {
+//     //     self.index == other.index
+//     //         && self.full == other.full
+//     //         && Iterator::eq(self.elements.iter(), other.elements.iter())
+//     //         && self.next == other.next
+//     // }
+// }
 
 impl<
         T: Clone + std::fmt::Debug,

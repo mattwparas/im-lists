@@ -1,6 +1,6 @@
 use std::{ops::Deref, rc::Rc, sync::Arc};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct RcConstructor {}
 
 impl<T> SmartPointerConstructor<T> for RcConstructor {
@@ -14,7 +14,7 @@ impl<T> SmartPointerConstructor<T> for RcConstructor {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ArcConstructor {}
 
 impl<T> SmartPointerConstructor<T> for ArcConstructor {
