@@ -26,7 +26,7 @@ use crate::{
 /// In addition, the unrolled linked list is able to avoid the costly cache misses that a typical linked list
 /// suffers from, seeing very realistic performance gains.
 
-#[derive(PartialEq, Clone, PartialOrd)]
+#[derive(PartialEq, Clone)]
 pub struct SharedList<T: Clone>(UnrolledList<T, ArcConstructor, ArcConstructor>);
 
 impl<T: Clone> SharedList<T> {

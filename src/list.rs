@@ -23,7 +23,7 @@ use crate::{
 /// In addition, the unrolled linked list is able to avoid the costly cache misses that a typical linked list
 /// suffers from, seeing very realistic performance gains.
 
-#[derive(PartialEq, PartialOrd, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct List<T: Clone>(UnrolledList<T, RcConstructor, RcConstructor>);
 
 impl<T: Clone> List<T> {

@@ -306,6 +306,12 @@ macro_rules! impl_traits {
 
         impl<T: Clone + Eq> Eq for $list<T> {}
 
+        impl<T: Clone + PartialOrd> PartialOrd for $list<T> {
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                self.iter().partial_cmp(other.iter())
+            }
+        }
+
         impl<T: Clone + Ord> Ord for $list<T> {
             fn cmp(&self, other: &Self) -> Ordering {
                 self.iter().cmp(other.iter())
