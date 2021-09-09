@@ -1,6 +1,6 @@
 # Contribution guidelines
 
-First off, thank you for considering contributing to {{project-name}}.
+First off, thank you for considering contributing to `im-lists`.
 
 If your contribution is not straightforward, please first discuss the change you
 wish to make by creating a new issue before making the change.
@@ -8,7 +8,7 @@ wish to make by creating a new issue before making the change.
 ## Reporting issues
 
 Before reporting an issue on the
-[issue tracker](https://github.com/{{username}}/{{project-name}}/issues),
+[issue tracker](https://github.com/mattwparas/im-lists/issues),
 please check that it has not already been reported by searching for some related
 keywords.
 
@@ -19,7 +19,7 @@ Try to do one pull request per change.
 ### Updating the changelog
 
 Update the changes you have made in
-[CHANGELOG](https://github.com/{{username}}/{{project-name}}/blob/main/CHANGELOG.md)
+[CHANGELOG](https://github.com/mattwparas/im-lists/blob/main/CHANGELOG.md)
 file under the **Unreleased** section.
 
 Add the changes of your pull request to one of the following subsections,
@@ -39,11 +39,9 @@ If the required subsection does not exist yet under **Unreleased**, create it!
 
 ### Set up
 
-This is no different than other Rust projects.
-
 ```shell
-git clone https://github.com/{{username}}/{{project-name}}
-cd {{project-name}}
+git clone https://github.com/mattwparas/im-lists
+cd im-lists
 cargo test
 ```
 
@@ -52,7 +50,7 @@ cargo test
 - Run Clippy:
 
   ```shell
-  cargo clippy --all-targets --all-features --workspace
+  cargo clippy --all-features --workspace
   ```
 
 - Run all tests:

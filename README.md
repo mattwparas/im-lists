@@ -11,9 +11,9 @@ An unrolled linked list is a linked list where each node contains a vector of el
 Licensed under either of
 
 * Apache License, Version 2.0
-   ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+   ([LICENSE-APACHE](https://github.com/mattwparas/im-lists/blob/master/LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 * MIT license
-   ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+   ([LICENSE-MIT](https://github.com/mattwparas/im-lists/blob/master/LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 at your option.
 
@@ -23,4 +23,4 @@ Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](https://github.com/mattwparas/im-lists/blob/master/CONTRIBUTING.md).
