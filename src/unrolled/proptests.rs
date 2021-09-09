@@ -201,6 +201,14 @@ proptest! {
     fn iterators_equivalent(list in list_strategy_from_iterator()) {
         assert!(Iterator::eq(list.iter(), (&list).into_iter()));
     }
+
+    #[test]
+    fn simple_sorting(mut vec in vec_strategy()) {
+        let mut list: List<_> = vec.clone().into();
+        list.sort();
+        vec.sort();
+        assert!(Iterator::eq(list.iter(), vec.iter()));
+    }
 }
 
 fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {

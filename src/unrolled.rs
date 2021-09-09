@@ -316,19 +316,22 @@ impl<
     }
 
     // Figure out how in the heck you sort this
-    pub fn _sort(&mut self)
+    pub fn sort(&mut self)
     where
         T: Ord,
     {
-        self._sort_by(Ord::cmp)
+        self.sort_by(Ord::cmp)
     }
 
     // Figure out how you sort this
-    pub fn _sort_by<F>(&mut self, _cmp: F)
+    pub fn sort_by<F>(&mut self, cmp: F)
     where
         F: Fn(&T, &T) -> Ordering,
     {
-        todo!()
+        let list = std::mem::take(self);
+        let mut vec = list.into_iter().collect::<Vec<_>>();
+        vec.sort_by(cmp);
+        *self = vec.into();
     }
 
     // Append single value (?)

@@ -1,4 +1,4 @@
-use std::iter::FromIterator;
+use std::{cmp::Ordering, iter::FromIterator};
 
 use crate::{
     shared::RcConstructor,
@@ -262,6 +262,40 @@ impl<T: Clone> List<T> {
     /// ```
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Sorts the list
+    ///
+    /// # Examples
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::list;
+    /// let mut list = list![4, 2, 6, 3, 1, 5];
+    /// list.sort();
+    /// assert_eq!(list, list![1, 2, 3, 4, 5, 6]);
+    /// ```
+    pub fn sort(&mut self)
+    where
+        T: Ord,
+    {
+        self.0.sort()
+    }
+
+    /// Sorts the list according to the ordering
+    ///
+    /// # Examples
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::list;
+    /// let mut list = list![4, 2, 6, 3, 1, 5];
+    /// list.sort_by(Ord::cmp);
+    /// assert_eq!(list, list![1, 2, 3, 4, 5, 6]);
+    /// ```
+    pub fn sort_by<F>(&mut self, cmp: F)
+    where
+        F: Fn(&T, &T) -> Ordering,
+    {
+        self.0.sort_by(cmp)
     }
 }
 
