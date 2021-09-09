@@ -96,3 +96,45 @@ impl<T> SmartPointer for Arc<T> {
         Arc::ptr_eq(this, other)
     }
 }
+
+#[cfg(test)]
+mod shared_pointer_tests {
+    use super::*;
+
+    #[test]
+    fn rc_ptr_eq() {
+        let one = <RcConstructor as SmartPointerConstructor<usize>>::RC::new(10);
+
+        let two = <RcConstructor as SmartPointerConstructor<usize>>::RC::clone(&one);
+
+        assert!(<RcConstructor as SmartPointerConstructor<usize>>::RC::ptr_eq(&one, &two));
+    }
+
+    #[test]
+    fn arc_ptr_eq() {
+        let one = <ArcConstructor as SmartPointerConstructor<usize>>::RC::new(10);
+
+        let two = <ArcConstructor as SmartPointerConstructor<usize>>::RC::clone(&one);
+
+        assert!(<ArcConstructor as SmartPointerConstructor<usize>>::RC::ptr_eq(&one, &two));
+    }
+
+    #[test]
+    fn arc_try_unwrap() {
+        let one = <ArcConstructor as SmartPointerConstructor<usize>>::RC::new(10);
+
+        assert!(<ArcConstructor as SmartPointerConstructor<usize>>::RC::try_unwrap(one).is_ok());
+    }
+
+    #[test]
+    fn arc_get_mut() {
+        let mut one = <ArcConstructor as SmartPointerConstructor<usize>>::RC::new(10);
+
+        let mut_ref =
+            <ArcConstructor as SmartPointerConstructor<usize>>::RC::get_mut(&mut one).unwrap();
+
+        *mut_ref = 20;
+
+        assert_eq!(one.as_ref(), &20);
+    }
+}
