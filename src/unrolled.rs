@@ -648,28 +648,9 @@ impl<
         IterWrapper(
             self.node_iter()
                 .flat_map(|x| x.elements()[0..x.index()].iter().rev()),
-            // self.test_iter(),
         )
-        // self.test_iter()
     }
 }
-
-// impl<
-//         'a,
-//         T: Clone,
-//         C: SmartPointerConstructor<Vec<T>>,
-//         S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
-//     > IntoIterator for &'a UnrolledList<T, C, S>
-// {
-//     type Item = &'a T;
-//     type IntoIter = RefIter<'a, T, C, S>
-
-//     #[inline(always)]
-//     fn into_iter(self) -> Self::IntoIter {
-//         self.node_iter()
-//             .flat_map(|x| x.elements()[0..x.index()].into_iter().rev())
-//     }
-// }
 
 // and we'll implement FromIterator
 // TODO specialize this for the into version?

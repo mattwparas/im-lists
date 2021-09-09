@@ -2,7 +2,9 @@
 
 ![Actions Status](https://github.com/mattwparas/im-lists/workflows/Build/badge.svg) [![Coverage Status](https://coveralls.io/repos/github/mattwparas/im-lists/badge.svg?branch=master)](https://coveralls.io/github/mattwparas/im-lists?branch=master)
 
-A crate containing an implementation of an unrolled linked list. This linked list is implemented with a backing of `Arc` and `Rc`, for single or multi-threaded environments.
+An implementation of a persistent unrolled linked list. This linked list is implemented with a backing of either `Arc` or `Rc`, for single or multi-threaded environments. The single threaded list can be found as a `List`, and the thread-safe implementation can be found as a `SharedList`.
+
+An unrolled linked list is a linked list where each node contains a vector of elements. While the algorithmic complexity is the same as a normal naive linked list, storing elements in vectors improves cache locality and also gives practical speed ups on common operations.
 
 ## License
 
