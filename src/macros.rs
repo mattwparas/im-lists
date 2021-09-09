@@ -161,6 +161,15 @@ macro_rules! public_api_tests {
             list.sort_by(Ord::cmp);
             assert_eq!(list, $list_macro![1, 2, 3, 4, 5]);
         }
+
+        #[test]
+        fn push_back() {
+            let mut list = $list_macro![];
+            list.push_back(0);
+            list.push_back(1);
+            list.push_back(2);
+            assert_eq!(list, $list_macro![0, 1, 2]);
+        }
     };
 }
 

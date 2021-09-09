@@ -20,6 +20,7 @@ enum Action {
     Cdr,
     Append(Vec<usize>),
     Reverse,
+    PushBack(usize),
 }
 
 impl Action {
@@ -45,6 +46,10 @@ impl Action {
                 vec.reverse();
                 vec
             }
+            Action::PushBack(value) => {
+                vec.push(value);
+                vec
+            }
         }
     }
 
@@ -61,6 +66,10 @@ impl Action {
                 list
             }
             Action::Reverse => list.reverse(),
+            Action::PushBack(value) => {
+                list.push_back(value);
+                list
+            }
         }
     }
 }
@@ -81,11 +90,12 @@ fn crunch_actions_for_list(initial: List<usize>, actions: Vec<Action>) -> List<u
 
 fn action_strategy() -> impl Strategy<Value = Action> {
     prop_oneof![
-        any::<usize>().prop_map(|x| Action::Cons(x)),
+        any::<usize>().prop_map(Action::Cons),
         Just(Action::Cdr),
         prop::collection::vec(0..100usize, 0..100)
             .prop_map(|x| Action::Append(x.into_iter().collect())),
-        Just(Action::Reverse)
+        Just(Action::Reverse),
+        any::<usize>().prop_map(Action::PushBack)
     ]
 }
 
@@ -219,11 +229,11 @@ fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {
 
     resulting_list.assert_invariants();
 
-    println!("List length: {}", resulting_list.len());
-    println!("vector length: {}", resulting_vector.len());
+    // println!("List length: {}", resulting_list.len());
+    // println!("vector length: {}", resulting_vector.len());
 
-    println!("List: {:?}", resulting_list);
-    println!("Vector: {:?}", resulting_vector);
+    // println!("List: {:?}", resulting_list);
+    // println!("Vector: {:?}", resulting_vector);
 
     assert!(Iterator::eq(resulting_list.iter(), resulting_vector.iter()));
 }

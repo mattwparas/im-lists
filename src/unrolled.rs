@@ -334,10 +334,9 @@ impl<
         *self = vec.into();
     }
 
-    // Append single value (?)
-    // Its super bad and not sure that I would want to support it but here we are
-    pub fn _push_back(&mut self, _value: T) {
-        todo!()
+    // Append a single value to the end
+    pub fn push_back(&mut self, value: T) {
+        self.extend(std::iter::once(value))
     }
 
     // // Extend from an iterator over values

@@ -206,6 +206,25 @@ impl<T: Clone> List<T> {
         self.0.push_front(value)
     }
 
+    /// Push one value to the back of the list
+    ///
+    /// Time: O(n)
+    ///
+    /// # Examples
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::list;
+    /// let mut list = list![];
+    /// list.push_back(0);
+    /// list.push_back(1);
+    /// list.push_back(2);
+    /// list.push_back(3);
+    /// assert_eq!(list, list![0, 1, 2, 3])
+    /// ```
+    pub fn push_back(&mut self, value: T) {
+        self.0.push_back(value)
+    }
+
     /// Constructs an iterator over the list
     pub fn iter(&self) -> impl Iterator<Item = &'_ T> {
         self.0.iter()
