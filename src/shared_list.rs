@@ -266,20 +266,6 @@ impl<T: Clone> SharedList<T> {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
-
-    /// Returns a list with the elements of the iterator appended to the list
-    /// # Examples
-    ///
-    /// ```
-    /// # #[macro_use] extern crate im_lists;
-    /// # use im_lists::shared_list;
-    /// let list = shared_list![1usize, 2, 3];
-    /// let vec = vec![4, 5, 6];
-    /// assert_eq!(list.extend(vec), shared_list![1, 2, 3, 4, 5, 6])
-    /// ```
-    pub fn extend(self, iter: impl IntoIterator<Item = T>) -> Self {
-        SharedList(self.0.extend(iter))
-    }
 }
 
 impl_traits!(SharedList, ArcConstructor);

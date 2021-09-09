@@ -337,11 +337,11 @@ impl<
         todo!()
     }
 
-    // Extend from an iterator over values
-    // TODO optimize this otherwise
-    pub fn extend(self, iter: impl IntoIterator<Item = T>) -> Self {
-        self.append(iter.into_iter().collect())
-    }
+    // // Extend from an iterator over values
+    // // TODO optimize this otherwise
+    // pub fn extend_func(self, iter: impl IntoIterator<Item = T>) -> Self {
+    //     self.append(iter.into_iter().collect())
+    // }
 
     pub fn is_empty(&self) -> bool {
         self.0.elements.is_empty()
@@ -471,6 +471,17 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
             elements.push(value);
             cdr
         }
+    }
+}
+
+impl<
+        T: Clone,
+        C: SmartPointerConstructor<Vec<T>>,
+        S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
+    > Extend<T> for UnrolledList<T, C, S>
+{
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        self.append_mut(iter.into_iter().collect())
     }
 }
 

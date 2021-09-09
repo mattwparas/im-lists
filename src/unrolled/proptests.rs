@@ -56,7 +56,10 @@ impl Action {
                 list
             }
             Action::Cdr => list.cdr().unwrap_or(List::new()),
-            Action::Append(right) => list.extend(right),
+            Action::Append(right) => {
+                list.extend(right);
+                list
+            }
             Action::Reverse => list.reverse(),
         }
     }

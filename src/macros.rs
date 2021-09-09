@@ -131,9 +131,10 @@ macro_rules! public_api_tests {
 
         #[test]
         fn extend() {
-            let list = $list_macro![1usize, 2, 3];
+            let mut list = $list_macro![1usize, 2, 3];
             let vec = vec![4, 5, 6];
-            assert_eq!(list.extend(vec), $list_macro![1, 2, 3, 4, 5, 6])
+            list.extend(vec);
+            assert_eq!(list, $list_macro![1, 2, 3, 4, 5, 6])
         }
     };
 }
@@ -166,6 +167,12 @@ macro_rules! impl_traits {
         impl<T: Clone> Default for $list<T> {
             fn default() -> Self {
                 Self::new()
+            }
+        }
+
+        impl<T: Clone> Extend<T> for $list<T> {
+            fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+                self.append_mut(iter.into_iter().collect())
             }
         }
 
