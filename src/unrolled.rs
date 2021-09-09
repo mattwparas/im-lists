@@ -805,7 +805,7 @@ impl<
     > From<&[T]> for UnrolledList<T, C, S>
 {
     fn from(vec: &[T]) -> Self {
-        vec.into_iter().cloned().collect()
+        vec.iter().cloned().collect()
     }
 }
 
