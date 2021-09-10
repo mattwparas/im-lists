@@ -148,7 +148,7 @@ impl<T: Clone> SharedList<T> {
     }
 
     /// Get the "rest" of the elements as a list.
-    /// Alias for [`cdr`](crate::sharedList::SharedList::cdr)
+    /// Alias for [`cdr`](crate::shared_list::SharedList::cdr)
     pub fn rest(&self) -> Option<SharedList<T>> {
         self.cdr()
     }

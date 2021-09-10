@@ -197,7 +197,7 @@ impl<
             }
         }
 
-        nodes.pop().unwrap_or(Self::new())
+        nodes.pop().unwrap_or_default()
     }
 
     pub fn tail(&self, mut len: usize) -> Option<Self> {
