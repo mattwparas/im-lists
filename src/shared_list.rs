@@ -120,9 +120,9 @@ impl<T: Clone> SharedList<T> {
     /// let first = list.first().cloned();
     /// assert_eq!(first, Some(1));
     ///
-    /// let list: SharedList<usize> = list![];
+    /// let list: SharedList<usize> = shared_list![];
     /// let first = list.first();
-    /// assert!(car.is_none());
+    /// assert!(first.is_none());
     /// ```
     pub fn first(&self) -> Option<&T> {
         self.get(0)
@@ -148,7 +148,7 @@ impl<T: Clone> SharedList<T> {
     }
 
     /// Get the "rest" of the elements as a list.
-    /// Alias for [`cdr`](crate::sharedList::SharedList::cdr)
+    /// Alias for [`cdr`](crate::shared_list::SharedList::cdr)
     pub fn rest(&self) -> Option<SharedList<T>> {
         self.cdr()
     }
@@ -254,6 +254,38 @@ impl<T: Clone> SharedList<T> {
     /// ```
     pub fn push_back(&mut self, value: T) {
         self.0.push_back(value)
+    }
+
+    /// Construct a new list from the first `count` elements from the current list
+    ///
+    /// # Examples
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::shared_list;
+    /// let list = shared_list![0, 1, 2, 3, 4, 5];
+    /// let new_list = list.take(3);
+    /// assert_eq!(new_list, shared_list![0, 1, 2]);
+    /// ```
+    pub fn take(&self, count: usize) -> Self {
+        SharedList(self.0.take(count))
+    }
+
+    /// Returns the list after the first `len` elements of lst.
+    /// If the list has fewer then `len` elements, then this returns `None`.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::shared_list;
+    /// let list = shared_list![0, 1, 2, 3, 4, 5];
+    /// let new_list = list.tail(2);
+    /// assert_eq!(new_list.unwrap(), shared_list![2, 3, 4, 5]);
+    ///
+    /// let no_list = list.tail(100);
+    /// assert!(no_list.is_none())
+    /// ```
+    pub fn tail(&self, len: usize) -> Option<Self> {
+        self.0.tail(len).map(SharedList)
     }
 
     /// Constructs an iterator over the list

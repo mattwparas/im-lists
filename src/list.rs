@@ -119,7 +119,7 @@ impl<T: Clone> List<T> {
     ///
     /// let list: List<usize> = list![];
     /// let first = list.first();
-    /// assert!(car.is_none());
+    /// assert!(first.is_none());
     /// ```
     pub fn first(&self) -> Option<&T> {
         self.get(0)
@@ -251,6 +251,38 @@ impl<T: Clone> List<T> {
     /// ```
     pub fn push_back(&mut self, value: T) {
         self.0.push_back(value)
+    }
+
+    /// Construct a new list from the first `count` elements from the current list
+    ///
+    /// # Examples
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::list;
+    /// let list = list![0, 1, 2, 3, 4, 5];
+    /// let new_list = list.take(3);
+    /// assert_eq!(new_list, list![0, 1, 2]);
+    /// ```
+    pub fn take(&self, count: usize) -> Self {
+        List(self.0.take(count))
+    }
+
+    /// Returns the list after the first `len` elements of lst.
+    /// If the list has fewer then `len` elements, then this returns `None`.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::list;
+    /// let list = list![0, 1, 2, 3, 4, 5];
+    /// let new_list = list.tail(2);
+    /// assert_eq!(new_list.unwrap(), list![2, 3, 4, 5]);
+    ///
+    /// let no_list = list.tail(100);
+    /// assert!(no_list.is_none())
+    /// ```
+    pub fn tail(&self, len: usize) -> Option<Self> {
+        self.0.tail(len).map(List)
     }
 
     /// Constructs an iterator over the list

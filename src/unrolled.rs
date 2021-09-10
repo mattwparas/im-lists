@@ -149,6 +149,83 @@ impl<
         UnrolledCell::cons(value, other)
     }
 
+    pub fn take(&self, mut count: usize) -> Self {
+        // If the count of the vector
+        if count == 0 {
+            return Self::new();
+        }
+
+        let mut nodes = Vec::new();
+
+        // If we've asked for more elements than this list contains
+        // and there aren't any more to follow, just return this list
+        if count > self.0.index && self.0.next.is_none() {
+            return self.clone();
+        }
+
+        for mut node in self.clone().into_node_iter() {
+            if count < node.0.index {
+                let inner = S::make_mut(&mut node.0);
+                // this is the new tail, point to the end
+                inner.next = None;
+
+                // We want to chop off whatever we need to
+                let elements_mut = C::make_mut(&mut inner.elements);
+
+                // Grab the end of the vector, this will be the new backing
+                let remaining = elements_mut.split_off(inner.index - count);
+                inner.index = count;
+                *elements_mut = remaining;
+                nodes.push(node);
+                break;
+            } else {
+                count -= node.0.elements.len();
+                nodes.push(node);
+            }
+        }
+
+        let mut rev_iter = (0..nodes.len()).into_iter().rev();
+        rev_iter.next();
+
+        for i in rev_iter {
+            let prev = nodes.pop().unwrap();
+
+            if let Some(UnrolledList(cell)) = nodes.get_mut(i) {
+                S::make_mut(cell).next = Some(prev);
+            } else {
+                unreachable!()
+            }
+        }
+
+        nodes.pop().unwrap_or_default()
+    }
+
+    pub fn tail(&self, mut len: usize) -> Option<Self> {
+        // If the count of the vector
+        if len == 0 {
+            return Some(self.clone());
+        }
+
+        for mut node in self.clone().into_node_iter() {
+            if len < node.0.index {
+                let inner = S::make_mut(&mut node.0);
+                // this is the new tail, point to the end
+                // inner.next = None;
+                inner.index -= len;
+                return Some(node);
+            } else {
+                len -= node.0.elements.len();
+            }
+        }
+
+        if len == 0 {
+            return Some(Self::new());
+        }
+
+        // Self::new()
+        None
+    }
+
     /// Alias for cons_mut
     pub fn push_front(&mut self, value: T) {
         self.cons_mut(value)
@@ -1029,28 +1106,41 @@ mod iterator_tests {
     }
 
     #[test]
-    fn testing_iteration_duration() {
-        use std::time::Instant;
+    fn take() {
+        let list: RcList<usize> = (0..2 * CAPACITY).into_iter().collect();
+        let next = list.take(100);
 
-        let list = (0..100000).into_iter().collect::<RcList<_>>();
+        println!("{:?}", next);
+        println!("{:?}", next.elements());
 
-        let now = Instant::now();
+        assert!(Iterator::eq(0..100usize, next.into_iter()))
+    }
 
-        let sum1 = list.iter().sum::<usize>();
+    #[test]
+    fn take_big() {
+        let list: RcList<usize> = (0..2 * CAPACITY).into_iter().collect();
+        let next = list.take(CAPACITY + 100);
+        assert!(Iterator::eq(0..CAPACITY + 100usize, next.into_iter()))
+    }
 
-        let sum1time = now.elapsed();
-        let now2 = Instant::now();
+    #[test]
+    fn tail() {
+        let list: RcList<usize> = (0..2 * CAPACITY).into_iter().collect();
+        let next = list.tail(CAPACITY + 100).unwrap();
 
-        let sum2 = (&list).into_iter().sum::<usize>();
+        println!("next: {:?}", next);
+        assert!(Iterator::eq(
+            CAPACITY + 100usize..2 * CAPACITY,
+            next.into_iter()
+        ))
+    }
 
-        let sum2time = now2.elapsed();
+    #[test]
+    fn tail_bigger_than_list() {
+        let list: RcList<usize> = (0..2 * CAPACITY).into_iter().collect();
+        let next = list.tail(CAPACITY * 4);
 
-        println!(
-            "Sum1: {:?} - {:?}, Sum2: {:?} - {:?}",
-            sum1, sum1time, sum2, sum2time
-        );
-
-        // println!("")
+        assert!(next.is_none())
     }
 }
 
