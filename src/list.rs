@@ -77,9 +77,9 @@ impl<T: Clone> List<T> {
     /// # #[macro_use] extern crate im_lists;
     /// # use im_lists::list;
     /// let list = list![1, 2, 3, 4, 5];
-    /// assert_eq!(list.last(), Some(5));
+    /// assert_eq!(list.last().cloned(), Some(5));
     /// ```
-    pub fn last(&self) -> Option<T> {
+    pub fn last(&self) -> Option<&T> {
         self.0.last()
     }
 
@@ -104,6 +104,27 @@ impl<T: Clone> List<T> {
         self.0.car()
     }
 
+    /// Returns a reference to the first element of the list.
+    /// Returns None if the list is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::list;
+    /// # use im_lists::list::List;
+    /// let list = list![1, 2, 3, 4, 5];
+    /// let first = list.first().cloned();
+    /// assert_eq!(first, Some(1));
+    ///
+    /// let list: List<usize> = list![];
+    /// let first = list.first();
+    /// assert!(car.is_none());
+    /// ```
+    pub fn first(&self) -> Option<&T> {
+        self.get(0)
+    }
+
     /// Get the "rest" of the elements as a list, excluding the first element
     ///
     /// # Examples
@@ -121,6 +142,12 @@ impl<T: Clone> List<T> {
     /// ```
     pub fn cdr(&self) -> Option<List<T>> {
         self.0.cdr().map(List)
+    }
+
+    /// Get the "rest" of the elements as a list.
+    /// Alias for [`cdr`](crate::list::List::cdr)
+    pub fn rest(&self) -> Option<List<T>> {
+        self.cdr()
     }
 
     /// Gets the cdr of the list, mutably.
@@ -149,6 +176,12 @@ impl<T: Clone> List<T> {
             Some(_) => Some(self),
             None => None,
         }
+    }
+
+    /// Gets the rest of the list, mutably.
+    /// Alias for [`cdr_mut`](crate::list::List::cdr_mut)
+    pub fn rest_mut(&mut self) -> Option<&mut Self> {
+        self.cdr_mut()
     }
 
     /// Pushes an element onto the front of the list, returning a new list

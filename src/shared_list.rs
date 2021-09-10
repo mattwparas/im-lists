@@ -80,9 +80,9 @@ impl<T: Clone> SharedList<T> {
     /// # #[macro_use] extern crate im_lists;
     /// # use im_lists::shared_list;
     /// let list = shared_list![1, 2, 3, 4, 5];
-    /// assert_eq!(list.last(), Some(5));
+    /// assert_eq!(list.last().cloned(), Some(5));
     /// ```
-    pub fn last(&self) -> Option<T> {
+    pub fn last(&self) -> Option<&T> {
         self.0.last()
     }
 
@@ -107,6 +107,27 @@ impl<T: Clone> SharedList<T> {
         self.0.car()
     }
 
+    /// Returns a reference to the first element of the list.
+    /// Returns None if the list is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::shared_list;
+    /// # use im_lists::shared_list::SharedList;
+    /// let list = shared_list![1, 2, 3, 4, 5];
+    /// let first = list.first().cloned();
+    /// assert_eq!(first, Some(1));
+    ///
+    /// let list: SharedList<usize> = list![];
+    /// let first = list.first();
+    /// assert!(car.is_none());
+    /// ```
+    pub fn first(&self) -> Option<&T> {
+        self.get(0)
+    }
+
     /// Get the "rest" of the elements as a list, excluding the first element
     ///
     /// # Examples
@@ -124,6 +145,12 @@ impl<T: Clone> SharedList<T> {
     /// ```
     pub fn cdr(&self) -> Option<SharedList<T>> {
         self.0.cdr().map(SharedList)
+    }
+
+    /// Get the "rest" of the elements as a list.
+    /// Alias for [`cdr`](crate::sharedList::SharedList::cdr)
+    pub fn rest(&self) -> Option<SharedList<T>> {
+        self.cdr()
     }
 
     /// Gets the cdr of the list, mutably.
@@ -152,6 +179,12 @@ impl<T: Clone> SharedList<T> {
             Some(_) => Some(self),
             None => None,
         }
+    }
+
+    /// Gets the rest of the list, mutably.
+    /// Alias for [`cdr_mut`](crate::shared_list::SharedList::cdr_mut)
+    pub fn rest_mut(&mut self) -> Option<&mut Self> {
+        self.cdr_mut()
     }
 
     /// Pushes an element onto the front of the list, returning a new list

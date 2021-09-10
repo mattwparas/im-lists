@@ -183,7 +183,7 @@ proptest! {
     #[test]
     fn last_always_selects_last(vec in vec_strategy()) {
         let list: List<usize> = vec.clone().into();
-        assert_eq!(list.last(), vec.last().cloned());
+        assert_eq!(list.last(), vec.last());
     }
 
     // #[test]

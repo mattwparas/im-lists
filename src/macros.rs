@@ -37,7 +37,7 @@ macro_rules! public_api_tests {
         #[test]
         fn last() {
             let list = $list_macro![1, 2, 3, 4, 5];
-            assert_eq!(list.last(), Some(5));
+            assert_eq!(list.last().cloned(), Some(5));
         }
 
         #[test]
@@ -48,6 +48,17 @@ macro_rules! public_api_tests {
 
             let list: $type<usize> = $list_macro![];
             let car = list.car();
+            assert!(car.is_none());
+        }
+
+        #[test]
+        fn first() {
+            let list = $list_macro![1, 2, 3, 4, 5];
+            let car = list.first();
+            assert_eq!(car.cloned(), Some(1));
+
+            let list: $type<usize> = $list_macro![];
+            let car = list.first();
             assert!(car.is_none());
         }
 
@@ -73,6 +84,21 @@ macro_rules! public_api_tests {
             assert!(list.cdr_mut().is_some());
             assert_eq!(list, $list_macro![3]);
             assert!(list.cdr_mut().is_none());
+            assert_eq!(list, $list_macro![]);
+        }
+
+        #[test]
+        fn rest_mut() {
+            let mut list = $list_macro![1, 2, 3, 4, 5];
+            list.rest_mut().expect("This list has a tail");
+            assert_eq!(list, $list_macro![2, 3, 4, 5]);
+
+            let mut list = $list_macro![1, 2, 3];
+            assert!(list.rest_mut().is_some());
+            assert_eq!(list, $list_macro![2, 3]);
+            assert!(list.rest_mut().is_some());
+            assert_eq!(list, $list_macro![3]);
+            assert!(list.rest_mut().is_none());
             assert_eq!(list, $list_macro![]);
         }
 

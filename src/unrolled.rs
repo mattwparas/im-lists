@@ -133,12 +133,11 @@ impl<
         left
     }
 
-    pub fn last(&self) -> Option<T> {
+    pub fn last(&self) -> Option<&T> {
         self.node_iter()
             .last()
             .map(|x| x.elements().first())
             .flatten()
-            .cloned()
     }
 
     // Should be O(1) always
@@ -1020,13 +1019,13 @@ mod iterator_tests {
     #[test]
     fn last_single_node() {
         let list: RcList<_> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].into();
-        assert_eq!(list.last(), Some(10));
+        assert_eq!(list.last().cloned(), Some(10));
     }
 
     #[test]
     fn last_multiple_nodes() {
         let list: RcList<_> = (0..2 * CAPACITY).into_iter().collect();
-        assert_eq!(list.last(), Some(CAPACITY * 2 - 1))
+        assert_eq!(list.last().cloned(), Some(CAPACITY * 2 - 1))
     }
 
     #[test]
