@@ -218,6 +218,10 @@ impl<
             }
         }
 
+        if len == 0 {
+            return Some(Self::new());
+        }
+
         // Self::new()
         None
     }
