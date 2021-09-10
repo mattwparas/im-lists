@@ -299,6 +299,7 @@ macro_rules! impl_traits {
             }
         }
 
+        /// An iterator over lists with values of type `T`.
         pub struct IterRef<'a, T: Clone>(IterWrapper<'a, T, $rc_type, $rc_type>);
 
         impl<'a, T: Clone> Iterator for IterRef<'a, T> {
@@ -317,6 +318,7 @@ macro_rules! impl_traits {
             }
         }
 
+        /// A consuming iterator over lists with values of type `T`.
         pub struct Iter<T: Clone>(ConsumingWrapper<T, $rc_type, $rc_type>);
 
         impl<T: Clone> Iterator for Iter<T> {
