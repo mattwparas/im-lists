@@ -217,6 +217,23 @@ macro_rules! public_api_tests {
                 $list_macro![1, 2, 3, 4, 5, 6, 7, 8, 9]
             );
         }
+
+        #[test]
+        fn take() {
+            let list = $list_macro![0, 1, 2, 3, 4, 5];
+            let new_list = list.take(3);
+            assert_eq!(new_list, $list_macro![0, 1, 2]);
+        }
+
+        #[test]
+        fn tail() {
+            let list = $list_macro![0, 1, 2, 3, 4, 5];
+            let new_list = list.tail(2);
+            assert_eq!(new_list.unwrap(), $list_macro![2, 3, 4, 5]);
+
+            let no_list = list.tail(100);
+            assert!(no_list.is_none())
+        }
     };
 }
 

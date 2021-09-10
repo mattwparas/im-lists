@@ -219,6 +219,31 @@ proptest! {
         vec.sort();
         assert!(Iterator::eq(list.iter(), vec.iter()));
     }
+
+    #[test]
+    fn simple_take(vec in vec_strategy(), count in (0..256*3usize)) {
+        let list: List<_> = vec.clone().into();
+
+        assert!(Iterator::eq(list.take(count).iter(), vec.iter().take(count)))
+    }
+
+    #[test]
+    fn tail(vec in vec_strategy(), count in (0..256*4usize)) {
+        let list: List<_> = vec.clone().into();
+
+        let tail = list.tail(count);
+
+        if count > list.len() {
+            assert!(tail.is_none())
+        } else {
+            assert!(tail.is_some());
+            assert_eq!(tail.unwrap().len() + count, list.len());
+        }
+
+        // else {
+        //     assert_eq!(tail.unwrap().len(), list.len() - count);
+        // }
+    }
 }
 
 fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {
