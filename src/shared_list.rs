@@ -1,3 +1,15 @@
+//! A persistent, thread safe, list.
+//!
+//! This is a sequence of elements, akin to a cons list. The most common operation is to
+//! [`cons`](crate::shared_list::SharedList::cons) to the front (or [`cons_mut`](crate::shared_list::SharedList::cons_mut))
+//! The API is designed to be a drop in replacement for an immutable linked list implementation, with instead the backing
+//! being an unrolled linked list.
+//!
+//! # Performance Notes
+//!
+//! Using the mutable functions when possible enables in place mutation. Much of the internal structure is shared,
+//! so even immutable functions can be fast, but the mutable functions will be faster.
+
 use std::{cmp::Ordering, iter::FromIterator};
 
 // #[cfg(test)]
@@ -8,7 +20,7 @@ use crate::{
     unrolled::{ConsumingWrapper, IterWrapper, UnrolledList},
 };
 
-/// A persistent, thread safe, List.
+/// A persistent, thread safe, list.
 ///
 /// This list is suitable for a multi threaded environment. If do not need an immutable list that can be shared
 /// across threads (i.e., is [`Send`] + [`Sync`], see [`List`](crate::list::List)).
@@ -25,7 +37,6 @@ use crate::{
 /// performance wins. For a list that is fully filled, iteration becomes O(n / 256), rather than the typical O(n).
 /// In addition, the unrolled linked list is able to avoid the costly cache misses that a typical linked list
 /// suffers from, seeing very realistic performance gains.
-
 #[derive(Clone)]
 pub struct SharedList<T: Clone>(UnrolledList<T, ArcConstructor, ArcConstructor>);
 

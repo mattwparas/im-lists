@@ -300,9 +300,9 @@ macro_rules! impl_traits {
         }
 
         /// An iterator over lists with values of type `T`.
-        pub struct IterRef<'a, T: Clone>(IterWrapper<'a, T, $rc_type, $rc_type>);
+        pub struct Iter<'a, T: Clone>(IterWrapper<'a, T, $rc_type, $rc_type>);
 
-        impl<'a, T: Clone> Iterator for IterRef<'a, T> {
+        impl<'a, T: Clone> Iterator for Iter<'a, T> {
             type Item = &'a T;
 
             impl_iter!();
@@ -310,18 +310,18 @@ macro_rules! impl_traits {
 
         impl<'a, T: Clone> IntoIterator for &'a $list<T> {
             type Item = &'a T;
-            type IntoIter = IterRef<'a, T>;
+            type IntoIter = Iter<'a, T>;
 
             #[inline(always)]
             fn into_iter(self) -> Self::IntoIter {
-                IterRef((&self.0).into_iter())
+                Iter((&self.0).into_iter())
             }
         }
 
         /// A consuming iterator over lists with values of type `T`.
-        pub struct Iter<T: Clone>(ConsumingWrapper<T, $rc_type, $rc_type>);
+        pub struct ConsumingIter<T: Clone>(ConsumingWrapper<T, $rc_type, $rc_type>);
 
-        impl<T: Clone> Iterator for Iter<T> {
+        impl<T: Clone> Iterator for ConsumingIter<T> {
             type Item = T;
 
             impl_iter!();
@@ -329,11 +329,11 @@ macro_rules! impl_traits {
 
         impl<T: Clone> IntoIterator for $list<T> {
             type Item = T;
-            type IntoIter = Iter<T>;
+            type IntoIter = ConsumingIter<T>;
 
             #[inline(always)]
             fn into_iter(self) -> Self::IntoIter {
-                Iter(self.0.into_iter())
+                ConsumingIter(self.0.into_iter())
             }
         }
 

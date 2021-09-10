@@ -7,6 +7,7 @@ pub(crate) mod shared;
 pub mod shared_list;
 pub(crate) mod unrolled;
 
+/// Construct a [`List`](crate::list::List) from a sequence of elements
 #[macro_export]
 macro_rules! list {
     () => { $crate::list::List::new() };
@@ -22,6 +23,7 @@ macro_rules! list {
     }};
 }
 
+/// Construct a [`SharedList`](crate::shared_list::SharedList) from a sequence of elements
 #[macro_export]
 macro_rules! shared_list {
     () => { $crate::shared_list::SharedList::new() };
