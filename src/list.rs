@@ -39,11 +39,6 @@ impl<T: Clone> List<T> {
         self.0.strong_count()
     }
 
-    /// Get the number of cells that comprise this list
-    pub fn cell_count(&self) -> usize {
-        self.0.cell_count()
-    }
-
     /// Get the length of the list
     ///
     /// # Examples

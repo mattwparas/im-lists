@@ -88,9 +88,10 @@ impl<
         S::RC::strong_count(&self.0)
     }
 
-    pub fn cell_count(&self) -> usize {
-        self.node_iter().count()
-    }
+    // #[cfg(test)]
+    // fn cell_count(&self) -> usize {
+    //     self.node_iter().count()
+    // }
 
     // This is actually like O(n / 64) which is actually quite nice
     // Saves us some time
