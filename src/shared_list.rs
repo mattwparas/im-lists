@@ -34,6 +34,11 @@ use crate::{
 /// performance wins. For a list that is fully filled, iteration becomes O(n / 256), rather than the typical O(n).
 /// In addition, the unrolled linked list is able to avoid the costly cache misses that a typical linked list
 /// suffers from, seeing very realistic performance gains.
+///
+/// Let *n* be the number of elements in the list, and *m* is the capacity of a node.
+/// In the worst case, a node will be on average half filled. In the best case, all nodes are completely full.
+/// This means for operations that for a normal linked list may take linear time *Θ(n)*, we get a constant factor
+/// decrease of either a factor of *m* or *m / 2*.
 #[derive(Clone)]
 pub struct SharedList<T: Clone>(UnrolledList<T, ArcConstructor, ArcConstructor>);
 

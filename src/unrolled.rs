@@ -1126,6 +1126,14 @@ mod iterator_tests {
         assert_eq!(list.pop_front().unwrap(), 100);
         assert_eq!(list.cell_count(), 1);
     }
+
+    #[test]
+    fn append_big() {
+        let mut list: RcList<usize> = (0..3).into_iter().collect();
+        let big_list: RcList<usize> = (0..CAPACITY - 1).into_iter().collect();
+
+        list.append_mut(big_list);
+    }
 }
 
 #[cfg(test)]
