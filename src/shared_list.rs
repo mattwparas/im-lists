@@ -12,9 +12,6 @@
 
 use std::{cmp::Ordering, iter::FromIterator};
 
-// #[cfg(test)]
-// use crate::public_api_tests;
-
 use crate::{
     shared::ArcConstructor,
     unrolled::{ConsumingWrapper, IterWrapper, UnrolledList},
