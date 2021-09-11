@@ -52,8 +52,12 @@ impl Action {
                 vec
             }
             Action::PopFront => {
-                vec.remove(0);
-                vec
+                if vec.len() == 0 {
+                    vec
+                } else {
+                    vec.remove(0);
+                    vec
+                }
             }
         }
     }
