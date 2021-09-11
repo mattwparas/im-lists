@@ -11,17 +11,6 @@ macro_rules! public_api_tests {
             assert_eq!(list.strong_count(), 1);
         }
 
-        // #[test]
-        // fn cell_count() {
-        //     let mut list: $type<usize> = (0..256).into_iter().collect();
-        //     assert_eq!(list.cell_count(), 1);
-
-        //     list.push_front(100);
-        //     list.push_front(200);
-
-        //     assert_eq!(list.cell_count(), 2);
-        // }
-
         #[test]
         fn len() {
             let list = $list_macro![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];

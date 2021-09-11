@@ -30,7 +30,7 @@ use crate::{
 /// ## Performance Notes
 ///
 /// The algorithmic complexity of an unrolled linked list matches that of a normal linked list - however in practice
-/// we have a (somewhat - this is more complex) constant factor of the capacity of a node that gives us practical
+/// we have a decrease by the factor of the capacity of a node that gives us practical
 /// performance wins. For a list that is fully filled, iteration becomes O(n / 256), rather than the typical O(n).
 /// In addition, the unrolled linked list is able to avoid the costly cache misses that a typical linked list
 /// suffers from, seeing very realistic performance gains.
