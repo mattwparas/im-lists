@@ -1,9 +1,9 @@
 [package]
-name = "im_lists"
+name = "im-lists"
 version = "0.1.0"
 authors = ["mattwparas <matthewparas2020@u.northwestern.edu>"]
 edition = "2018"
-readme = "./README.md"
+readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mattwparas/im-lists"
 keywords = ["immutable", "unrolled-linked-list", "persistent", "list", "linked-list"]
