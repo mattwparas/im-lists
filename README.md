@@ -1,6 +1,6 @@
 # im-lists
 
-![Actions Status](https://github.com/mattwparas/im-lists/workflows/Build/badge.svg) [![Coverage Status](https://coveralls.io/repos/github/mattwparas/im-lists/badge.svg?branch=master)](https://coveralls.io/github/mattwparas/im-lists?branch=master)
+![Actions Status](https://github.com/mattwparas/im-lists/workflows/Build/badge.svg) [![Coverage Status](https://coveralls.io/repos/github/mattwparas/im-lists/badge.svg?branch=master)](https://coveralls.io/github/mattwparas/im-lists?branch=master) [![Crate Status](https://img.shields.io/crates/v/im-lists.svg)](https://crates.io/crates/im-lists) [![Docs Status](https://docs.rs/im-lists/badge.svg)](https://docs.rs/im-lists/0.1.0/im_lists/)
 
 An implementation of a persistent unrolled linked list. This linked list is implemented with a backing of either `Arc` or `Rc`, for single or multi-threaded environments. The single threaded list can be found as a `List`, and the thread-safe implementation can be found as a `SharedList`.
 
