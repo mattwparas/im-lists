@@ -248,6 +248,23 @@ impl<T: Clone> SharedList<T> {
         self.0.push_front(value)
     }
 
+    /// Mutably pop the first value off of the list
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate im_lists;
+    /// # use im_lists::shared_list;
+    /// let mut list = shared_list![1, 2, 3];
+    /// assert_eq!(list.pop_front().unwrap(), 1);
+    /// assert_eq!(list.pop_front().unwrap(), 2);
+    /// assert_eq!(list.pop_front().unwrap(), 3);
+    /// assert!(list.pop_front().is_none())
+    /// ```
+    pub fn pop_front(&mut self) -> Option<T> {
+        self.0.pop_front()
+    }
+
     /// Push one value to the back of the list
     ///
     /// Time: O(n)

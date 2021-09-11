@@ -88,10 +88,10 @@ impl<
         S::RC::strong_count(&self.0)
     }
 
-    // #[cfg(test)]
-    // fn cell_count(&self) -> usize {
-    //     self.node_iter().count()
-    // }
+    #[cfg(test)]
+    fn cell_count(&self) -> usize {
+        self.node_iter().count()
+    }
 
     // This is actually like O(n / 64) which is actually quite nice
     // Saves us some time
@@ -268,6 +268,32 @@ impl<
     // Should also not have to clone
     pub fn cdr(&self) -> Option<UnrolledList<T, C, S>> {
         self.0.cdr()
+    }
+
+    // Just pop off the internal value and move the index up
+    pub fn pop_front(&mut self) -> Option<T> {
+        let cell = S::make_mut(&mut self.0);
+        let elements = C::make_mut(&mut cell.elements);
+
+        let ret = elements.pop();
+
+        if ret.is_some() {
+            cell.index -= 1;
+        }
+
+        println!("Elements length after popping: {}", elements.len());
+        println!("Elements index after popping: {}", cell.index);
+
+        // If after we've popped, its empty, move the pointer to the
+        // next one (if there is one)
+        if cell.index == 0 {
+            if let Some(next) = &mut cell.next {
+                let mut next = std::mem::take(next);
+                std::mem::swap(self, &mut next);
+            }
+        }
+
+        ret
     }
 
     // Returns the cdr of the list
@@ -1141,6 +1167,25 @@ mod iterator_tests {
         let next = list.tail(CAPACITY * 4);
 
         assert!(next.is_none())
+    }
+
+    #[test]
+    fn pop_front() {
+        let mut list: RcList<usize> = vec![0, 1, 2, 3].into_iter().collect();
+        assert_eq!(list.pop_front().unwrap(), 0);
+        assert_eq!(list.pop_front().unwrap(), 1);
+        assert_eq!(list.pop_front().unwrap(), 2);
+        assert_eq!(list.pop_front().unwrap(), 3);
+        assert!(list.pop_front().is_none())
+    }
+
+    #[test]
+    fn pop_front_capacity() {
+        let mut list: RcList<usize> = (0..CAPACITY).into_iter().collect();
+        list.push_front(100);
+        assert_eq!(list.cell_count(), 2);
+        assert_eq!(list.pop_front().unwrap(), 100);
+        assert_eq!(list.cell_count(), 1);
     }
 }
 
