@@ -51,17 +51,6 @@ impl<
     }
 }
 
-// impl<
-//         T: Clone + Ord,
-//         C: SmartPointerConstructor<Vec<T>>,
-//         S: SmartPointerConstructor<UnrolledCell<T, S, C>>,
-//     > Ord for UnrolledList<T, C, S>
-// {
-//     fn cmp(&self, other: &Self) -> Ordering {
-//         self.iter().cmp(other.iter())
-//     }
-// }
-
 impl<
         T: Clone,
         C: SmartPointerConstructor<Vec<T>>,
@@ -242,7 +231,6 @@ impl<
         // TODO cdr here is an issue - only moves the offset, no way to know that its full
         // Cause its not actually full
         if self.0.full || self.elements().len() > CAPACITY - 1 {
-            // println!("Case 1: {}, {}", self.0.full, self.elements().len());
             // Make dummy node
             // return reference to this new node
             let mut default = UnrolledList(S::RC::new(UnrolledCell {
@@ -254,13 +242,8 @@ impl<
 
             std::mem::swap(self, &mut default);
         } else {
-            // println!("Case 2");
-            // println!("#### before: {:?}", self.elements());
-
             let inner = S::make_mut(&mut self.0);
             inner.cons_mut(value);
-
-            // println!("#### After: {:?}", self.elements());
         }
     }
 
@@ -357,9 +340,6 @@ impl<
         self.node_iter().all(Self::does_node_satisfy_invariant)
     }
 
-    // TODO document time complexity of this
-    // Looks like its O(n / 64)
-    // TODO make this not so bad - also how it works with half full nodes
     pub fn get(&self, mut index: usize) -> Option<&T> {
         if index < self.0.index {
             self.0.elements.get(self.0.index - index - 1)
@@ -468,37 +448,6 @@ pub(crate) struct UnrolledCell<
     full: bool,
 }
 
-// impl<
-//         T: Clone + PartialEq,
-//         S: SmartPointerConstructor<Self>,
-//         C: SmartPointerConstructor<Vec<T>>,
-//     > PartialEq for UnrolledCell<T, S, C>
-// {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.index == other.index
-//             && self.full == other.full
-//             && Iterator::eq(self.elements.iter(), other.elements.iter())
-//             && self.next == other.next
-//     }
-// }
-
-// impl<
-//         T: Clone + PartialOrd,
-//         S: SmartPointerConstructor<Self>,
-//         C: SmartPointerConstructor<Vec<T>>,
-//     > PartialOrd for UnrolledCell<T, S, C>
-// {
-//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-//         todo!()
-//     }
-//     // fn eq(&self, other: &Self) -> bool {
-//     //     self.index == other.index
-//     //         && self.full == other.full
-//     //         && Iterator::eq(self.elements.iter(), other.elements.iter())
-//     //         && self.next == other.next
-//     // }
-// }
-
 impl<
         T: Clone + std::fmt::Debug,
         C: SmartPointerConstructor<Vec<T>>,
@@ -522,11 +471,6 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
         }
     }
 
-    // fn is_empty(&self) -> bool {
-    //     self.elements.is_empty()
-    // }
-
-    // TODO this fails on an empty list
     // Speed this up by fixing the indexing
     fn car(&self) -> Option<&T> {
         if self.index == 0 {
@@ -535,9 +479,7 @@ impl<T: Clone, S: SmartPointerConstructor<Self>, C: SmartPointerConstructor<Vec<
         self.elements.get(self.index - 1)
     }
 
-    // TODO fix cdr
     fn cdr(&self) -> Option<UnrolledList<T, C, S>> {
-        // println!("index: {}", self.index);
         if self.index > 1 {
             Some(UnrolledList(S::RC::new(self.advance_cursor())))
         } else {

@@ -100,7 +100,6 @@ fn crunch_actions_for_vec(initial: Vec<usize>, actions: Vec<Action>) -> Vec<usiz
 fn crunch_actions_for_list(initial: List<usize>, actions: Vec<Action>) -> List<usize> {
     actions.into_iter().fold(initial, |list, action| {
         let res = action.act_on_list(list);
-        // println!("After: {:?}", res);
         res
     })
 }
@@ -204,13 +203,6 @@ proptest! {
         assert_eq!(list.last(), vec.last());
     }
 
-    // #[test]
-    // fn iterators_equal(vec in vec_strategy()) {
-    //     let list: List<usize> = vec.into();
-
-    //     assert!(Iterator::eq(list.iter(), list.test_iter()));
-
-    // }
 
     #[test]
     fn into_iter_equal(vec in vec_strategy()) {
@@ -258,9 +250,6 @@ proptest! {
             assert_eq!(tail.unwrap().len() + count, list.len());
         }
 
-        // else {
-        //     assert_eq!(tail.unwrap().len(), list.len() - count);
-        // }
     }
 }
 
@@ -271,12 +260,6 @@ fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {
     let resulting_vector = crunch_actions_for_vec(vec, actions);
 
     resulting_list.assert_invariants();
-
-    println!("List length: {}", resulting_list.len());
-    println!("vector length: {}", resulting_vector.len());
-
-    println!("List: {:?}", resulting_list);
-    println!("Vector: {:?}", resulting_vector);
 
     assert!(Iterator::eq(resulting_list.iter(), resulting_vector.iter()));
 }
@@ -506,18 +489,6 @@ fn test_case_with_pop_front() {
         2778, 405, 6474, 8801, 5049, 6924, 420, 8859, 3063, 2047, 3974, 9679, 9534, 7674, 1245,
         627, 9019, 4195, 9803, 1430, 6503, 9069, 3865, 7755, 2696, 7588, 2226, 1875, 7604,
     ];
-
-    // println!("{}", vec.len());
-
-    // println!(
-    //     "{}",
-    //     vec![
-    //         40, 50, 59, 7, 50, 97, 62, 59, 18, 98, 79, 63, 8, 18, 6, 23, 31, 7, 36, 94, 29, 94, 21,
-    //         4, 6, 67, 19, 10, 60, 61, 55, 30, 47, 4, 18, 40, 33, 27, 57, 19, 80, 92, 72, 6, 76, 93,
-    //         81, 30, 5, 48, 85, 61, 98, 46, 12, 97, 70, 61, 50, 37, 30, 10, 75, 14,
-    //     ]
-    //     .len()
-    // );
 
     let actions = vec![
         Append(vec![
