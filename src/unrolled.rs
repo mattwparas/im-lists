@@ -281,9 +281,6 @@ impl<
             cell.index -= 1;
         }
 
-        println!("Elements length after popping: {}", elements.len());
-        println!("Elements index after popping: {}", cell.index);
-
         // If after we've popped, its empty, move the pointer to the
         // next one (if there is one)
         if cell.index == 0 {
