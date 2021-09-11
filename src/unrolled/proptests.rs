@@ -21,6 +21,7 @@ enum Action {
     Append(Vec<usize>),
     Reverse,
     PushBack(usize),
+    PopFront,
 }
 
 impl Action {
@@ -50,6 +51,14 @@ impl Action {
                 vec.push(value);
                 vec
             }
+            Action::PopFront => {
+                if vec.len() == 0 {
+                    vec
+                } else {
+                    vec.remove(0);
+                    vec
+                }
+            }
         }
     }
 
@@ -68,6 +77,14 @@ impl Action {
             Action::Reverse => list.reverse(),
             Action::PushBack(value) => {
                 list.push_back(value);
+                list
+            }
+            Action::PopFront => {
+                // println!("Before pop: {:?}", list);
+                // println!("list elements: {:?}", list.elements());
+                list.pop_front();
+                // println!("After pop: {:?}", list);
+                // println!("list elements: {:?}", list.elements());
                 list
             }
         }
@@ -95,7 +112,8 @@ fn action_strategy() -> impl Strategy<Value = Action> {
         prop::collection::vec(0..100usize, 0..100)
             .prop_map(|x| Action::Append(x.into_iter().collect())),
         Just(Action::Reverse),
-        any::<usize>().prop_map(Action::PushBack)
+        any::<usize>().prop_map(Action::PushBack),
+        Just(Action::PopFront)
     ]
 }
 
@@ -254,11 +272,11 @@ fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {
 
     resulting_list.assert_invariants();
 
-    // println!("List length: {}", resulting_list.len());
-    // println!("vector length: {}", resulting_vector.len());
+    println!("List length: {}", resulting_list.len());
+    println!("vector length: {}", resulting_vector.len());
 
-    // println!("List: {:?}", resulting_list);
-    // println!("Vector: {:?}", resulting_vector);
+    println!("List: {:?}", resulting_list);
+    println!("Vector: {:?}", resulting_vector);
 
     assert!(Iterator::eq(resulting_list.iter(), resulting_vector.iter()));
 }
@@ -464,4 +482,58 @@ fn large_tail_case() {
         assert!(tail.is_some());
         assert_eq!(tail.unwrap().len() + count, list.len());
     }
+}
+
+#[test]
+fn test_case_with_pop_front() {
+    use Action::*;
+
+    let vec = vec![
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 18, 5736,
+        4565, 2115, 8698, 7837, 4028, 1829, 1260, 1371, 337, 2812, 6058, 6692, 5494, 435, 6074,
+        6006, 3648, 323, 1917, 921, 9537, 5695, 8082, 7948, 7588, 4575, 8334, 1386, 3132, 4254,
+        1637, 9078, 7801, 3, 5774, 988, 9699, 1343, 1700, 2436, 256, 5538, 526, 2349, 5732, 1483,
+        3540, 9386, 5981, 3972, 885, 5065, 4510, 7626, 8059, 1450, 3713, 4218, 1787, 8124, 546,
+        9435, 7970, 9694, 6981, 9713, 8629, 3395, 4192, 1297, 2281, 3699, 8094, 814, 5180, 3752,
+        1158, 9464, 1950, 9671, 1031, 2548, 5690, 5462, 392, 4761, 8679, 5836, 3684, 9613, 7873,
+        6647, 8638, 1952, 4545, 4515, 7764, 2022, 7638, 1398, 1595, 9997, 6210, 3909, 3254, 9825,
+        4210, 6406, 9982, 8625, 694, 75, 9261, 2974, 3955, 7796, 1086, 7294, 1399, 7215, 478, 4562,
+        1237, 8461, 8932, 7867, 1022, 4035, 6190, 9648, 1802, 1853, 8532, 9865, 6603, 2447, 6647,
+        6214, 2746, 560, 4637, 9917, 5030, 3867, 8388, 3738, 71, 3485, 7719, 455, 9631, 619, 4232,
+        9239, 2367, 3019, 2845, 951, 8251, 662, 6283, 287, 1239, 6415, 1589, 1228, 1009, 9402,
+        9089, 9627, 9026, 3848, 5218, 99, 2973, 2979, 6044, 4504, 1501, 2485, 8806, 2506, 9361,
+        310, 5821, 5707, 5531, 1242, 2989, 6187, 98, 9691, 4996, 2520, 3107, 1740, 9222, 3853,
+        2778, 405, 6474, 8801, 5049, 6924, 420, 8859, 3063, 2047, 3974, 9679, 9534, 7674, 1245,
+        627, 9019, 4195, 9803, 1430, 6503, 9069, 3865, 7755, 2696, 7588, 2226, 1875, 7604,
+    ];
+
+    // println!("{}", vec.len());
+
+    // println!(
+    //     "{}",
+    //     vec![
+    //         40, 50, 59, 7, 50, 97, 62, 59, 18, 98, 79, 63, 8, 18, 6, 23, 31, 7, 36, 94, 29, 94, 21,
+    //         4, 6, 67, 19, 10, 60, 61, 55, 30, 47, 4, 18, 40, 33, 27, 57, 19, 80, 92, 72, 6, 76, 93,
+    //         81, 30, 5, 48, 85, 61, 98, 46, 12, 97, 70, 61, 50, 37, 30, 10, 75, 14,
+    //     ]
+    //     .len()
+    // );
+
+    let actions = vec![
+        Append(vec![
+            40, 50, 59, 7, 50, 97, 62, 59, 18, 98, 79, 63, 8, 18, 6, 23, 31, 7, 36, 94, 29, 94, 21,
+            4, 6, 67, 19, 10, 60, 61, 55, 30, 47, 4, 18, 40, 33, 27, 57, 19, 80, 92, 72, 6, 76, 93,
+            81, 30, 5, 48, 85, 61, 98, 46, 12, 97, 70, 61, 50, 37, 30, 10, 75, 14,
+        ]),
+        Cdr,
+        Cons(6970920282707533934),
+        Cons(17163059031184983451),
+        Cdr,
+        PushBack(4160322910230717775),
+        PopFront,
+        PushBack(320814026882087868),
+        Cdr,
+    ];
+
+    random_test_runner(vec, actions);
 }
