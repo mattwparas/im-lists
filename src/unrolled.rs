@@ -77,6 +77,11 @@ impl<
         S::RC::strong_count(&self.0)
     }
 
+    // Compare the nodes for pointer equality
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        S::RC::ptr_eq(&self.0, &other.0)
+    }
+
     #[cfg(test)]
     fn cell_count(&self) -> usize {
         self.node_iter().count()

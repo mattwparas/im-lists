@@ -55,6 +55,11 @@ impl<T: Clone> SharedList<T> {
         self.0.strong_count()
     }
 
+    /// Compare this list to another for pointer equality
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        self.0.ptr_eq(&other.0)
+    }
+
     /// Get the length of the list
     ///
     /// # Examples
