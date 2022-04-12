@@ -128,10 +128,7 @@ impl<
     }
 
     pub fn last(&self) -> Option<&T> {
-        self.node_iter()
-            .last()
-            .map(|x| x.elements().first())
-            .flatten()
+        self.node_iter().last().and_then(|x| x.elements().first())
     }
 
     // Should be O(1) always
