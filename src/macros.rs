@@ -12,6 +12,17 @@ macro_rules! public_api_tests {
         }
 
         #[test]
+        fn ptr_eq() {
+            let left: $type<usize> = $list_macro![1, 2, 3, 4, 5];
+            let right: $type<usize> = $list_macro![1, 2, 3, 4, 5];
+
+            assert!(!left.ptr_eq(&right));
+
+            let left_clone: $type<usize> = left.clone();
+            assert!(left.ptr_eq(&left_clone))
+        }
+
+        #[test]
         fn len() {
             let list = $list_macro![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
             assert_eq!(list.len(), 10);

@@ -77,6 +77,11 @@ impl<
         S::RC::strong_count(&self.0)
     }
 
+    // Compare the nodes for pointer equality
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        S::RC::ptr_eq(&self.0, &other.0)
+    }
+
     #[cfg(test)]
     fn cell_count(&self) -> usize {
         self.node_iter().count()
@@ -123,10 +128,7 @@ impl<
     }
 
     pub fn last(&self) -> Option<&T> {
-        self.node_iter()
-            .last()
-            .map(|x| x.elements().first())
-            .flatten()
+        self.node_iter().last().and_then(|x| x.elements().first())
     }
 
     // Should be O(1) always
