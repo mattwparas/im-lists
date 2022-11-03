@@ -13,7 +13,7 @@
 use std::{cmp::Ordering, iter::FromIterator};
 
 use crate::{
-    shared::RcConstructor,
+    shared::{ArcPointer, PointerFamily, RcPointer},
     unrolled::{ConsumingWrapper, IterWrapper, UnrolledList},
 };
 
@@ -39,13 +39,23 @@ use crate::{
 /// In the worst case, a node will be on average half filled. In the best case, all nodes are completely full.
 /// This means for operations that for a normal linked list may take linear time *Θ(n)*, we get a constant factor
 /// decrease of either a factor of *m* or *m / 2*.
-#[derive(Clone)]
-pub struct List<T: Clone>(UnrolledList<T, RcConstructor, RcConstructor>);
+pub struct GenericList<T: Clone, P: PointerFamily = RcPointer, const N: usize = 256>(
+    UnrolledList<T, P, N>,
+);
 
-impl<T: Clone> List<T> {
+pub type SharedList<T> = GenericList<T, ArcPointer, 256>;
+pub type List<T> = GenericList<T, RcPointer, 256>;
+
+impl<T: Clone, P: PointerFamily, const N: usize> Clone for GenericList<T, P, N> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T: Clone, P: PointerFamily, const N: usize> GenericList<T, P, N> {
     /// Construct an empty list.
     pub fn new() -> Self {
-        List(UnrolledList::new())
+        GenericList(UnrolledList::new())
     }
 
     /// Get the number of strong references pointing to this list
@@ -161,13 +171,13 @@ impl<T: Clone> List<T> {
     /// let cdr = list.cdr();
     /// assert!(cdr.is_none());
     /// ```
-    pub fn cdr(&self) -> Option<List<T>> {
-        self.0.cdr().map(List)
+    pub fn cdr(&self) -> Option<GenericList<T, P, N>> {
+        self.0.cdr().map(GenericList)
     }
 
     /// Get the "rest" of the elements as a list.
     /// Alias for [`cdr`](crate::list::List::cdr)
-    pub fn rest(&self) -> Option<List<T>> {
+    pub fn rest(&self) -> Option<GenericList<T, P, N>> {
         self.cdr()
     }
 
@@ -215,7 +225,7 @@ impl<T: Clone> List<T> {
     /// let list = List::cons(1, List::cons(2, List::cons(3, List::cons(4, List::new()))));
     /// assert_eq!(list, list![1, 2, 3, 4]);
     /// ```
-    pub fn cons(value: T, other: List<T>) -> List<T> {
+    pub fn cons(value: T, other: GenericList<T, P, N>) -> GenericList<T, P, N> {
         Self(UnrolledList::cons(value, other.0))
     }
 
@@ -302,7 +312,7 @@ impl<T: Clone> List<T> {
     /// assert_eq!(new_list, list![0, 1, 2]);
     /// ```
     pub fn take(&self, count: usize) -> Self {
-        List(self.0.take(count))
+        GenericList(self.0.take(count))
     }
 
     /// Returns the list after the first `len` elements of lst.
@@ -320,7 +330,7 @@ impl<T: Clone> List<T> {
     /// assert!(no_list.is_none())
     /// ```
     pub fn tail(&self, len: usize) -> Option<Self> {
-        self.0.tail(len).map(List)
+        self.0.tail(len).map(GenericList)
     }
 
     /// Constructs an iterator over the list
@@ -346,7 +356,7 @@ impl<T: Clone> List<T> {
     /// assert_eq!(left.append(right), list![1, 2, 3, 4, 5, 6])
     /// ```
     pub fn append(self, other: Self) -> Self {
-        List(self.0.append(other.0))
+        GenericList(self.0.append(other.0))
     }
 
     /// Append the list 'other' to the end of the current list in place.
@@ -416,10 +426,442 @@ impl<T: Clone> List<T> {
     }
 }
 
-impl_traits!(List, RcConstructor);
+// impl_traits!(List, RcPointer);
+
+// #[cfg(test)]
+// mod api_tests {
+//     use super::*;
+//     public_api_tests!(list_api_tests, List, list);
+// }
+
+impl<T: Clone, P: PointerFamily, const N: usize> Default for GenericList<T, P, N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: Clone, P: PointerFamily, const N: usize> Extend<T> for GenericList<T, P, N> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        self.append_mut(iter.into_iter().collect())
+    }
+}
+
+// and we'll implement FromIterator
+impl<T: Clone, P: PointerFamily, const N: usize> FromIterator<T> for GenericList<T, P, N> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        GenericList(iter.into_iter().collect())
+    }
+}
+
+impl<T: Clone, P: PointerFamily, const N: usize> FromIterator<GenericList<T, P, N>>
+    for GenericList<T, P, N>
+{
+    fn from_iter<I: IntoIterator<Item = GenericList<T, P, N>>>(iter: I) -> Self {
+        GenericList(iter.into_iter().map(|x| x.0).collect())
+    }
+}
+
+impl<T: Clone, P: PointerFamily, const N: usize> From<Vec<T>> for GenericList<T, P, N> {
+    fn from(vec: Vec<T>) -> Self {
+        GenericList(vec.into_iter().collect())
+    }
+}
+
+impl<T: Clone + std::fmt::Debug, P: PointerFamily, const N: usize> std::fmt::Debug
+    for GenericList<T, P, N>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self).finish()
+    }
+}
+
+/// An iterator over lists with values of type `T`.
+pub struct Iter<'a, T: Clone, P: PointerFamily, const N: usize>(IterWrapper<'a, T, P, N>);
+
+impl<'a, T: Clone, P: PointerFamily, const N: usize> Iterator for Iter<'a, T, P, N> {
+    type Item = &'a T;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+
+    #[inline(always)]
+    fn fold<B, F>(self, init: B, f: F) -> B
+    where
+        Self: Sized,
+        F: FnMut(B, Self::Item) -> B,
+    {
+        self.0.fold(init, f)
+    }
+}
+
+impl<'a, T: Clone, P: PointerFamily, const N: usize> IntoIterator for &'a GenericList<T, P, N> {
+    type Item = &'a T;
+    type IntoIter = Iter<'a, T, P, N>;
+
+    #[inline(always)]
+    fn into_iter(self) -> Self::IntoIter {
+        Iter((&self.0).into_iter())
+    }
+}
+
+/// A consuming iterator over lists with values of type `T`.
+pub struct ConsumingIter<T: Clone, P: PointerFamily, const N: usize>(ConsumingWrapper<T, P, N>);
+
+impl<T: Clone, P: PointerFamily, const N: usize> Iterator for ConsumingIter<T, P, N> {
+    type Item = T;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+
+    #[inline(always)]
+    fn fold<B, F>(self, init: B, f: F) -> B
+    where
+        Self: Sized,
+        F: FnMut(B, Self::Item) -> B,
+    {
+        self.0.fold(init, f)
+    }
+}
+
+impl<T: Clone, P: PointerFamily, const N: usize> IntoIterator for GenericList<T, P, N> {
+    type Item = T;
+    type IntoIter = ConsumingIter<T, P, N>;
+
+    #[inline(always)]
+    fn into_iter(self) -> Self::IntoIter {
+        ConsumingIter(self.0.into_iter())
+    }
+}
+
+impl<'a, T: 'a + Clone, P: 'a + PointerFamily, const N: usize>
+    FromIterator<&'a GenericList<T, P, N>> for GenericList<T, P, N>
+{
+    fn from_iter<I: IntoIterator<Item = &'a GenericList<T, P, N>>>(iter: I) -> Self {
+        iter.into_iter().cloned().collect()
+    }
+}
+
+impl<T: Clone, P: PointerFamily, const N: usize> From<&[T]> for GenericList<T, P, N> {
+    fn from(vec: &[T]) -> Self {
+        vec.iter().cloned().collect()
+    }
+}
+
+impl<T: Clone + PartialEq, P: PointerFamily, const N: usize> PartialEq for GenericList<T, P, N> {
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
+
+impl<T: Clone + Eq, P: PointerFamily, const N: usize> Eq for GenericList<T, P, N> {}
+
+impl<T: Clone + PartialOrd, P: PointerFamily, const N: usize> PartialOrd for GenericList<T, P, N> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.iter().partial_cmp(other.iter())
+    }
+}
+
+impl<T: Clone + Ord, P: PointerFamily, const N: usize> Ord for GenericList<T, P, N> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.iter().cmp(other.iter())
+    }
+}
+
+impl<T: Clone, P: PointerFamily, const N: usize> std::ops::Add for GenericList<T, P, N> {
+    type Output = GenericList<T, P, N>;
+
+    /// Concatenate two lists
+    fn add(self, other: Self) -> Self::Output {
+        self.append(other)
+    }
+}
+
+impl<'a, T: Clone, P: PointerFamily, const N: usize> std::ops::Add for &'a GenericList<T, P, N> {
+    type Output = GenericList<T, P, N>;
+
+    /// Concatenate two lists
+    fn add(self, other: Self) -> Self::Output {
+        self.clone().append(other.clone())
+    }
+}
+
+impl<T: Clone, P: PointerFamily, const N: usize> std::iter::Sum for GenericList<T, P, N> {
+    fn sum<I>(it: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        it.fold(Self::new(), |a, b| a + b)
+    }
+}
+
+impl<T: Clone + std::hash::Hash, P: PointerFamily, const N: usize> std::hash::Hash
+    for GenericList<T, P, N>
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for i in self {
+            i.hash(state)
+        }
+    }
+}
+
+impl<T: Clone, P: PointerFamily, const N: usize> std::ops::Index<usize> for GenericList<T, P, N> {
+    type Output = T;
+    /// Get a reference to the value at index `index` in the vector.
+    ///
+    /// Time: O(log n)
+    fn index(&self, index: usize) -> &Self::Output {
+        match self.get(index) {
+            Some(value) => value,
+            None => panic!(
+                "{}::index: index out of bounds: {} < {}",
+                stringify!($list),
+                index,
+                self.len()
+            ),
+        }
+    }
+}
 
 #[cfg(test)]
-mod api_tests {
+mod tests {
+
     use super::*;
-    public_api_tests!(list_api_tests, List, list);
+    use crate::list;
+
+    #[test]
+    fn strong_count() {
+        let list: List<usize> = List::new();
+        assert_eq!(list.strong_count(), 1);
+    }
+
+    #[test]
+    fn ptr_eq() {
+        let left: List<usize> = list![1, 2, 3, 4, 5];
+        let right: List<usize> = list![1, 2, 3, 4, 5];
+
+        assert!(!left.ptr_eq(&right));
+
+        let left_clone: List<usize> = left.clone();
+        assert!(left.ptr_eq(&left_clone))
+    }
+
+    #[test]
+    fn len() {
+        let list = list![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        assert_eq!(list.len(), 10);
+    }
+
+    #[test]
+    fn reverse() {
+        let list = list![1, 2, 3, 4, 5].reverse();
+        assert_eq!(list, list![5, 4, 3, 2, 1]);
+    }
+
+    #[test]
+    fn last() {
+        let list = list![1, 2, 3, 4, 5];
+        assert_eq!(list.last().cloned(), Some(5));
+    }
+
+    #[test]
+    fn car() {
+        let list = list![1, 2, 3, 4, 5];
+        let car = list.car();
+        assert_eq!(car, Some(1));
+
+        let list: List<usize> = list![];
+        let car = list.car();
+        assert!(car.is_none());
+    }
+
+    #[test]
+    fn first() {
+        let list = list![1, 2, 3, 4, 5];
+        let car = list.first();
+        assert_eq!(car.cloned(), Some(1));
+
+        let list: List<usize> = list![];
+        let car = list.first();
+        assert!(car.is_none());
+    }
+
+    #[test]
+    fn cdr() {
+        let list = list![1, 2, 3, 4, 5];
+        let cdr = list.cdr().unwrap();
+        assert_eq!(cdr, list![2, 3, 4, 5]);
+        let list = list![5];
+        let cdr = list.cdr();
+        assert!(cdr.is_none());
+    }
+
+    #[test]
+    fn cdr_mut() {
+        let mut list = list![1, 2, 3, 4, 5];
+        list.cdr_mut().expect("This list has a tail");
+        assert_eq!(list, list![2, 3, 4, 5]);
+
+        let mut list = list![1, 2, 3];
+        assert!(list.cdr_mut().is_some());
+        assert_eq!(list, list![2, 3]);
+        assert!(list.cdr_mut().is_some());
+        assert_eq!(list, list![3]);
+        assert!(list.cdr_mut().is_none());
+        assert_eq!(list, list![]);
+    }
+
+    #[test]
+    fn rest_mut() {
+        let mut list = list![1, 2, 3, 4, 5];
+        list.rest_mut().expect("This list has a tail");
+        assert_eq!(list, list![2, 3, 4, 5]);
+
+        let mut list = list![1, 2, 3];
+        assert!(list.rest_mut().is_some());
+        assert_eq!(list, list![2, 3]);
+        assert!(list.rest_mut().is_some());
+        assert_eq!(list, list![3]);
+        assert!(list.rest_mut().is_none());
+        assert_eq!(list, list![]);
+    }
+
+    #[test]
+    fn cons() {
+        let list = List::cons(1, List::cons(2, List::cons(3, List::cons(4, List::new()))));
+        assert_eq!(list, list![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn cons_mut() {
+        let mut list = list![];
+        list.cons_mut(3);
+        list.cons_mut(2);
+        list.cons_mut(1);
+        list.cons_mut(0);
+        assert_eq!(list, list![0, 1, 2, 3])
+    }
+
+    #[test]
+    fn push_front() {
+        let mut list = list![];
+        list.push_front(3);
+        list.push_front(2);
+        list.push_front(1);
+        list.push_front(0);
+        assert_eq!(list, list![0, 1, 2, 3])
+    }
+
+    #[test]
+    fn iter() {
+        assert_eq!(list![1usize, 1, 1, 1, 1].iter().sum::<usize>(), 5);
+    }
+
+    #[test]
+    fn get() {
+        let list = list![1, 2, 3, 4, 5];
+        assert_eq!(list.get(3).cloned(), Some(4));
+        assert!(list.get(1000).is_none());
+    }
+
+    #[test]
+    fn append() {
+        let left = list![1usize, 2, 3];
+        let right = list![4usize, 5, 6];
+        assert_eq!(left.append(right), list![1, 2, 3, 4, 5, 6])
+    }
+
+    #[test]
+    fn append_mut() {
+        let mut left = list![1usize, 2, 3];
+        let right = list![4usize, 5, 6];
+        left.append_mut(right);
+        assert_eq!(left, list![1, 2, 3, 4, 5, 6])
+    }
+
+    #[test]
+    fn is_empty() {
+        let mut list = List::new();
+        assert!(list.is_empty());
+        list.cons_mut("applesauce");
+        assert!(!list.is_empty());
+    }
+
+    #[test]
+    fn extend() {
+        let mut list = list![1usize, 2, 3];
+        let vec = vec![4, 5, 6];
+        list.extend(vec);
+        assert_eq!(list, list![1, 2, 3, 4, 5, 6])
+    }
+
+    #[test]
+    fn sort() {
+        let mut list = list![5, 4, 3, 2, 1];
+        list.sort();
+        assert_eq!(list, list![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn sort_by() {
+        let mut list = list![5, 4, 3, 2, 1];
+        list.sort_by(Ord::cmp);
+        assert_eq!(list, list![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn push_back() {
+        let mut list = list![];
+        list.push_back(0);
+        list.push_back(1);
+        list.push_back(2);
+        assert_eq!(list, list![0, 1, 2]);
+    }
+
+    #[test]
+    fn add() {
+        let left = list![1, 2, 3, 4, 5];
+        let right = list![6, 7, 8, 9, 10];
+
+        assert_eq!(left + right, list![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    }
+
+    #[test]
+    fn sum() {
+        let list = vec![list![1, 2, 3], list![4, 5, 6], list![7, 8, 9]];
+        assert_eq!(
+            list.into_iter().sum::<List<_>>(),
+            list![1, 2, 3, 4, 5, 6, 7, 8, 9]
+        );
+    }
+
+    #[test]
+    fn take() {
+        let list = list![0, 1, 2, 3, 4, 5];
+        let new_list = list.take(3);
+        assert_eq!(new_list, list![0, 1, 2]);
+    }
+
+    #[test]
+    fn tail() {
+        let list = list![0, 1, 2, 3, 4, 5];
+        let new_list = list.tail(2);
+        assert_eq!(new_list.unwrap(), list![2, 3, 4, 5]);
+
+        let no_list = list.tail(100);
+        assert!(no_list.is_none())
+    }
 }

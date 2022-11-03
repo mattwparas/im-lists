@@ -1,10 +1,7 @@
 #![doc = include_str!("../README.md")]
 
-#[macro_use]
-pub(crate) mod macros;
 pub mod list;
 pub(crate) mod shared;
-pub mod shared_list;
 pub(crate) mod unrolled;
 
 /// Construct a [`List`](crate::list::List) from a sequence of elements
@@ -31,10 +28,10 @@ macro_rules! shared_list {
     ( $($x:expr),* ) => {{
         vec![$(
             $x,
-        ) *].into_iter().collect::<$crate::shared_list::SharedList<_>>()
+        ) *].into_iter().collect::<$crate::list::SharedList<_>>()
     }};
 
     ( $($x:expr ,)* ) => {{
-        vec![$($x)*].into_iter().collect::<$crate::shared_list::SharedList<_>>()
+        vec![$($x)*].into_iter().collect::<$crate::list::SharedList<_>>()
     }};
 }
