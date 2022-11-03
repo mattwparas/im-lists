@@ -2,6 +2,9 @@
 mod proptests;
 
 use crate::shared::{SmartPointer, SmartPointerConstructor};
+
+use crate::shared::PointerFamily;
+
 use itertools::Itertools;
 use std::cmp::Ordering;
 use std::iter::{FlatMap, FromIterator, Rev};
