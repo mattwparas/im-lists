@@ -19,13 +19,18 @@ use crate::{
 
 /// A persistent list.
 ///
-/// This list is suitable for a single threaded environment. If you would like an immutable list that can be shared
-/// across threads (i.e., is [`Send`] + [`Sync`], see [`SharedList`](crate::shared_list::SharedList)).
+/// This list is suitable for either a single threaded or multi threaded environment. The list accepts the smart pointer
+/// that you would like to use as a type parameter. There are sensible type aliases for implementations that you can use:
+///
+/// [`SharedList`](crate::list::SharedList) is simply a type alias for `GenericList<T, ArcPointer, 256>`, which is both [`Send`] + [`Sync`]
+/// Similarly, [`List`](crate::list::List) is just a type alias for `GenericList<T, RcPointer, 256>`.
 ///
 /// It's implemented as an unrolled linked list, which is a single linked list which stores a variable
-/// amount of elements in each node. The capacity of any individual node for now is set to to be 256 elements, which means that until more than 256 elements are cons'd onto a list, it will remain a vector under the hood.
+/// amount of elements in each node. The capacity of any individual node for now is set to to be 256 elements, which means that until more than 256 elements
+/// are cons'd onto a list, it will remain a vector under the hood.
 ///
-/// The list is also designed to leverage in place mutations whenever possible - if the number of references pointing to either a cell containing a vector or the shared vector is one, then that mutation is done in place. Otherwise, it is copy-on-write, maintaining our persistent invariant.
+/// The list is also designed to leverage in place mutations whenever possible - if the number of references pointing to either a cell containing a vector
+/// or the shared vector is one, then that mutation is done in place. Otherwise, it is copy-on-write, maintaining our persistent invariant.
 ///
 /// ## Performance Notes
 ///
@@ -56,6 +61,11 @@ impl<T: Clone, P: PointerFamily, const N: usize> GenericList<T, P, N> {
     /// Construct an empty list.
     pub fn new() -> Self {
         GenericList(UnrolledList::new())
+    }
+
+    /// Constructs an empty list with capacity `N`
+    pub fn new_with_capacity() -> Self {
+        GenericList(UnrolledList::new_with_capacity())
     }
 
     /// Get the number of strong references pointing to this list

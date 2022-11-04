@@ -1,7 +1,8 @@
 #![doc = include_str!("../README.md")]
 
+pub(crate) mod backing;
 pub mod list;
-pub(crate) mod shared;
+pub mod shared;
 pub(crate) mod unrolled;
 
 /// Construct a [`List`](crate::list::List) from a sequence of elements
@@ -20,10 +21,10 @@ macro_rules! list {
     }};
 }
 
-/// Construct a [`SharedList`](crate::shared_list::SharedList) from a sequence of elements
+/// Construct a [`SharedList`](crate::list::SharedList) from a sequence of elements
 #[macro_export]
 macro_rules! shared_list {
-    () => { $crate::shared_list::SharedList::new() };
+    () => { $crate::list::SharedList::new() };
 
     ( $($x:expr),* ) => {{
         vec![$(

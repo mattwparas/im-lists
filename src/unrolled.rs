@@ -219,14 +219,13 @@ impl<T: Clone, P: PointerFamily, const N: usize> UnrolledList<T, P, N> {
 
         // TODO cdr here is an issue - only moves the offset, no way to know that its full
         // Cause its not actually full
-        if self.0.full || self.elements().len() > N - 1 {
+        if self.elements().len() > N - 1 {
             // Make dummy node
             // return reference to this new node
             let mut default = UnrolledList(P::new(UnrolledCell {
                 index: 1,
                 elements: P::new(vec![value]),
                 next: Some(self.clone()),
-                full: false,
             }));
 
             std::mem::swap(self, &mut default);
@@ -293,7 +292,7 @@ impl<T: Clone, P: PointerFamily, const N: usize> UnrolledList<T, P, N> {
 
     #[cfg(test)]
     fn does_node_satisfy_invariant(&self) -> bool {
-        self.0.full || self.elements().len() <= N
+        self.elements().len() <= N
     }
 
     #[cfg(test)]
@@ -427,7 +426,6 @@ pub(crate) struct UnrolledCell<T: Clone, P: PointerFamily, const N: usize> {
     index: usize,
     elements: P::Pointer<Vec<T>>,
     next: Option<UnrolledList<T, P, N>>,
-    full: bool,
 }
 
 impl<T: Clone, P: PointerFamily, const N: usize> Clone for UnrolledCell<T, P, N> {
@@ -436,7 +434,6 @@ impl<T: Clone, P: PointerFamily, const N: usize> Clone for UnrolledCell<T, P, N>
             index: self.index,
             elements: P::clone(&self.elements),
             next: self.next.clone(),
-            full: self.full,
         }
     }
 }
@@ -455,7 +452,6 @@ impl<T: Clone, P: PointerFamily, const N: usize> UnrolledCell<T, P, N> {
             index: 0,
             elements: P::new(Vec::new()),
             next: None,
-            full: false,
         }
     }
 
@@ -464,7 +460,6 @@ impl<T: Clone, P: PointerFamily, const N: usize> UnrolledCell<T, P, N> {
             index: 0,
             elements: P::new(Vec::with_capacity(N)),
             next: None,
-            full: false,
         }
     }
 
@@ -476,6 +471,8 @@ impl<T: Clone, P: PointerFamily, const N: usize> UnrolledCell<T, P, N> {
         self.elements.get(self.index - 1)
     }
 
+    // This _does_ create a boxed representation of the next item. Its possible we don't actually
+    // need to do this, but for now we do
     fn cdr(&self) -> Option<UnrolledList<T, P, N>> {
         if self.index > 1 {
             Some(UnrolledList(P::new(self.advance_cursor())))
@@ -489,7 +486,6 @@ impl<T: Clone, P: PointerFamily, const N: usize> UnrolledCell<T, P, N> {
             index: self.index - 1,
             elements: P::clone(&self.elements),
             next: self.next.clone(),
-            full: self.full,
         }
     }
 
@@ -513,12 +509,11 @@ impl<T: Clone, P: PointerFamily, const N: usize> UnrolledCell<T, P, N> {
     // Spill over the values to a new node
     // otherwise, copy the node and spill over
     fn cons(value: T, mut cdr: UnrolledList<T, P, N>) -> UnrolledList<T, P, N> {
-        if cdr.0.full || cdr.elements().len() > N - 1 {
+        if cdr.elements().len() > N - 1 {
             UnrolledList(P::new(UnrolledCell {
                 index: 1,
                 elements: P::new(vec![value]),
                 next: Some(cdr),
-                full: false,
             }))
         } else {
             let inner = P::make_mut(&mut cdr.0);
@@ -665,12 +660,10 @@ impl<T: Clone, P: PointerFamily, const N: usize> FromIterator<T> for UnrolledLis
                 // TODO: Hopefully this actually collects into a vector with the correct capacity
                 let mut elements: Vec<_> = x.collect();
                 elements.reverse();
-                let full = elements.len() == N;
                 UnrolledList(P::new(UnrolledCell {
                     index: elements.len(),
                     elements: P::new(elements),
                     next: None,
-                    full,
                 }))
             })
             .collect();
