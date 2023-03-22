@@ -162,7 +162,7 @@ impl<T: Clone, P: PointerFamily, const N: usize> UnrolledList<T, P, N> {
             }
         }
 
-        let mut rev_iter = (0..nodes.len()).into_iter().rev();
+        let mut rev_iter = (0..nodes.len()).rev();
         rev_iter.next();
 
         for i in rev_iter {
@@ -368,7 +368,6 @@ impl<T: Clone, P: PointerFamily, const N: usize> UnrolledList<T, P, N> {
         }
 
         self.into_node_iter()
-            .into_iter()
             .chain(other.into_node_iter())
             .collect()
     }
@@ -668,7 +667,7 @@ impl<T: Clone, P: PointerFamily, const N: usize> FromIterator<T> for UnrolledLis
             })
             .collect();
 
-        let mut rev_iter = (0..pairs.len()).into_iter().rev();
+        let mut rev_iter = (0..pairs.len()).rev();
         rev_iter.next();
 
         for i in rev_iter {
@@ -694,7 +693,7 @@ impl<T: Clone, P: PointerFamily, const N: usize> FromIterator<UnrolledList<T, P,
         // Links up the nodes
         let mut nodes: Vec<_> = iter.into_iter().collect();
 
-        let mut rev_iter = (0..nodes.len()).into_iter().rev();
+        let mut rev_iter = (0..nodes.len()).rev();
         rev_iter.next();
 
         for i in rev_iter {
