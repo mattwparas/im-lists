@@ -1,10 +1,10 @@
 use proptest::prelude::*;
 
 use super::*;
-use crate::shared::RcConstructor;
+use crate::shared::RcPointer;
 
 // Define strategies here for property tests
-type List<T> = UnrolledList<T, RcConstructor, RcConstructor>;
+type List<T> = UnrolledList<T, RcPointer, 256>;
 
 // Defines an arbitrary list containing elements from -10000 to 10000
 fn list_strategy_from_iterator() -> impl Strategy<Value = List<isize>> {

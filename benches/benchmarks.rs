@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use im_lists::{list::List, shared_list::SharedList};
+use im_lists::list::{List, SharedList};
 
 use im_rc::Vector;
 use std::collections::LinkedList;

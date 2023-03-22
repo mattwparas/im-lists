@@ -1,10 +1,7 @@
 #![doc = include_str!("../README.md")]
 
-#[macro_use]
-pub(crate) mod macros;
 pub mod list;
-pub(crate) mod shared;
-pub mod shared_list;
+pub mod shared;
 pub(crate) mod unrolled;
 
 /// Construct a [`List`](crate::list::List) from a sequence of elements
@@ -23,18 +20,18 @@ macro_rules! list {
     }};
 }
 
-/// Construct a [`SharedList`](crate::shared_list::SharedList) from a sequence of elements
+/// Construct a [`SharedList`](crate::list::SharedList) from a sequence of elements
 #[macro_export]
 macro_rules! shared_list {
-    () => { $crate::shared_list::SharedList::new() };
+    () => { $crate::list::SharedList::new() };
 
     ( $($x:expr),* ) => {{
         vec![$(
             $x,
-        ) *].into_iter().collect::<$crate::shared_list::SharedList<_>>()
+        ) *].into_iter().collect::<$crate::list::SharedList<_>>()
     }};
 
     ( $($x:expr ,)* ) => {{
-        vec![$($x)*].into_iter().collect::<$crate::shared_list::SharedList<_>>()
+        vec![$($x)*].into_iter().collect::<$crate::list::SharedList<_>>()
     }};
 }
