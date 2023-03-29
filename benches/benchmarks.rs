@@ -25,7 +25,7 @@ pub fn iteration_bench(c: &mut Criterion) {
         (unrolled_arc_iteration, SharedList<_>),
         (
             vlist_rc_iteration,
-            im_lists::list::GenericList<_, im_lists::shared::RcPointer, 4, 4>
+            im_lists::list::GenericList<_, im_lists::shared::RcPointer, 4, 2>
         ),
         (immutable_vector_iteration, Vector<_>),
         (vec_iteration, Vec<_>),
@@ -67,7 +67,7 @@ pub fn construction_bench(c: &mut Criterion) {
         (unrolled_arc_construction, SharedList<_>),
         (
             vlist_rc_construction,
-            im_lists::list::GenericList<_, im_lists::shared::RcPointer, 4, 4>
+            im_lists::list::GenericList<_, im_lists::shared::RcPointer, 4, 2>
         ),
         (immutable_vector_construction, Vector<_>),
         (vec_construction, Vec<_>),
