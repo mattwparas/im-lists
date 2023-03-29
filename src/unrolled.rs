@@ -772,13 +772,12 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> FromIterator<T>
 
             let mut pairs: Vec<UnrolledList<_, _, N, G>> =
                 ExponentialChunks::<_, G>::new(iter.into_iter(), N)
-                    .into_iter()
                     .map(|x| {
                         let mut elements = x;
                         elements.reverse();
 
                         if elements.len() > chunk_size {
-                            chunk_size = chunk_size * G;
+                            chunk_size *= G;
                         }
 
                         UnrolledList(P::new(UnrolledCell {
