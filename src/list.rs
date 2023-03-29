@@ -44,20 +44,23 @@ use crate::{
 /// In the worst case, a node will be on average half filled. In the best case, all nodes are completely full.
 /// This means for operations that for a normal linked list may take linear time *Θ(n)*, we get a constant factor
 /// decrease of either a factor of *m* or *m / 2*.
-pub struct GenericList<T: Clone, P: PointerFamily = RcPointer, const N: usize = 256>(
-    UnrolledList<T, P, N>,
-);
+pub struct GenericList<
+    T: Clone,
+    P: PointerFamily = RcPointer,
+    const N: usize = 256,
+    const G: usize = 1,
+>(UnrolledList<T, P, N, G>);
 
 pub type SharedList<T> = GenericList<T, ArcPointer, 256>;
 pub type List<T> = GenericList<T, RcPointer, 256>;
 
-impl<T: Clone, P: PointerFamily, const N: usize> Clone for GenericList<T, P, N> {
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Clone for GenericList<T, P, N, G> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize> GenericList<T, P, N> {
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> GenericList<T, P, N, G> {
     /// Construct an empty list.
     pub fn new() -> Self {
         GenericList(UnrolledList::new())
@@ -181,13 +184,13 @@ impl<T: Clone, P: PointerFamily, const N: usize> GenericList<T, P, N> {
     /// let cdr = list.cdr();
     /// assert!(cdr.is_none());
     /// ```
-    pub fn cdr(&self) -> Option<GenericList<T, P, N>> {
+    pub fn cdr(&self) -> Option<GenericList<T, P, N, G>> {
         self.0.cdr().map(GenericList)
     }
 
     /// Get the "rest" of the elements as a list.
     /// Alias for [`cdr`](crate::list::List::cdr)
-    pub fn rest(&self) -> Option<GenericList<T, P, N>> {
+    pub fn rest(&self) -> Option<GenericList<T, P, N, G>> {
         self.cdr()
     }
 
@@ -235,7 +238,7 @@ impl<T: Clone, P: PointerFamily, const N: usize> GenericList<T, P, N> {
     /// let list = List::cons(1, List::cons(2, List::cons(3, List::cons(4, List::new()))));
     /// assert_eq!(list, list![1, 2, 3, 4]);
     /// ```
-    pub fn cons(value: T, other: GenericList<T, P, N>) -> GenericList<T, P, N> {
+    pub fn cons(value: T, other: GenericList<T, P, N, G>) -> GenericList<T, P, N, G> {
         Self(UnrolledList::cons(value, other.0))
     }
 
@@ -436,49 +439,49 @@ impl<T: Clone, P: PointerFamily, const N: usize> GenericList<T, P, N> {
     }
 }
 
-// impl_traits!(List, RcPointer);
-
-// #[cfg(test)]
-// mod api_tests {
-//     use super::*;
-//     public_api_tests!(list_api_tests, List, list);
-// }
-
-impl<T: Clone, P: PointerFamily, const N: usize> Default for GenericList<T, P, N> {
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Default
+    for GenericList<T, P, N, G>
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize> Extend<T> for GenericList<T, P, N> {
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Extend<T>
+    for GenericList<T, P, N, G>
+{
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         self.append_mut(iter.into_iter().collect())
     }
 }
 
 // and we'll implement FromIterator
-impl<T: Clone, P: PointerFamily, const N: usize> FromIterator<T> for GenericList<T, P, N> {
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> FromIterator<T>
+    for GenericList<T, P, N, G>
+{
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         GenericList(iter.into_iter().collect())
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize> FromIterator<GenericList<T, P, N>>
-    for GenericList<T, P, N>
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
+    FromIterator<GenericList<T, P, N, G>> for GenericList<T, P, N, G>
 {
-    fn from_iter<I: IntoIterator<Item = GenericList<T, P, N>>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = GenericList<T, P, N, G>>>(iter: I) -> Self {
         GenericList(iter.into_iter().map(|x| x.0).collect())
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize> From<Vec<T>> for GenericList<T, P, N> {
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> From<Vec<T>>
+    for GenericList<T, P, N, G>
+{
     fn from(vec: Vec<T>) -> Self {
         GenericList(vec.into_iter().collect())
     }
 }
 
-impl<T: Clone + std::fmt::Debug, P: PointerFamily, const N: usize> std::fmt::Debug
-    for GenericList<T, P, N>
+impl<T: Clone + std::fmt::Debug, P: PointerFamily, const N: usize, const G: usize> std::fmt::Debug
+    for GenericList<T, P, N, G>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_list().entries(self).finish()
@@ -486,9 +489,13 @@ impl<T: Clone + std::fmt::Debug, P: PointerFamily, const N: usize> std::fmt::Deb
 }
 
 /// An iterator over lists with values of type `T`.
-pub struct Iter<'a, T: Clone, P: PointerFamily, const N: usize>(IterWrapper<'a, T, P, N>);
+pub struct Iter<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize>(
+    IterWrapper<'a, T, P, N, G>,
+);
 
-impl<'a, T: Clone, P: PointerFamily, const N: usize> Iterator for Iter<'a, T, P, N> {
+impl<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
+    for Iter<'a, T, P, N, G>
+{
     type Item = &'a T;
 
     #[inline(always)]
@@ -511,9 +518,11 @@ impl<'a, T: Clone, P: PointerFamily, const N: usize> Iterator for Iter<'a, T, P,
     }
 }
 
-impl<'a, T: Clone, P: PointerFamily, const N: usize> IntoIterator for &'a GenericList<T, P, N> {
+impl<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterator
+    for &'a GenericList<T, P, N, G>
+{
     type Item = &'a T;
-    type IntoIter = Iter<'a, T, P, N>;
+    type IntoIter = Iter<'a, T, P, N, G>;
 
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
@@ -522,9 +531,13 @@ impl<'a, T: Clone, P: PointerFamily, const N: usize> IntoIterator for &'a Generi
 }
 
 /// A consuming iterator over lists with values of type `T`.
-pub struct ConsumingIter<T: Clone, P: PointerFamily, const N: usize>(ConsumingWrapper<T, P, N>);
+pub struct ConsumingIter<T: Clone, P: PointerFamily, const N: usize, const G: usize>(
+    ConsumingWrapper<T, P, N, G>,
+);
 
-impl<T: Clone, P: PointerFamily, const N: usize> Iterator for ConsumingIter<T, P, N> {
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
+    for ConsumingIter<T, P, N, G>
+{
     type Item = T;
 
     #[inline(always)]
@@ -547,9 +560,11 @@ impl<T: Clone, P: PointerFamily, const N: usize> Iterator for ConsumingIter<T, P
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize> IntoIterator for GenericList<T, P, N> {
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterator
+    for GenericList<T, P, N, G>
+{
     type Item = T;
-    type IntoIter = ConsumingIter<T, P, N>;
+    type IntoIter = ConsumingIter<T, P, N, G>;
 
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
@@ -557,42 +572,55 @@ impl<T: Clone, P: PointerFamily, const N: usize> IntoIterator for GenericList<T,
     }
 }
 
-impl<'a, T: 'a + Clone, P: 'a + PointerFamily, const N: usize>
-    FromIterator<&'a GenericList<T, P, N>> for GenericList<T, P, N>
+impl<'a, T: 'a + Clone, P: 'a + PointerFamily, const N: usize, const G: usize>
+    FromIterator<&'a GenericList<T, P, N, G>> for GenericList<T, P, N, G>
 {
-    fn from_iter<I: IntoIterator<Item = &'a GenericList<T, P, N>>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = &'a GenericList<T, P, N, G>>>(iter: I) -> Self {
         iter.into_iter().cloned().collect()
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize> From<&[T]> for GenericList<T, P, N> {
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> From<&[T]>
+    for GenericList<T, P, N, G>
+{
     fn from(vec: &[T]) -> Self {
         vec.iter().cloned().collect()
     }
 }
 
-impl<T: Clone + PartialEq, P: PointerFamily, const N: usize> PartialEq for GenericList<T, P, N> {
+impl<T: Clone + PartialEq, P: PointerFamily, const N: usize, const G: usize> PartialEq
+    for GenericList<T, P, N, G>
+{
     fn eq(&self, other: &Self) -> bool {
         self.iter().eq(other.iter())
     }
 }
 
-impl<T: Clone + Eq, P: PointerFamily, const N: usize> Eq for GenericList<T, P, N> {}
+impl<T: Clone + Eq, P: PointerFamily, const N: usize, const G: usize> Eq
+    for GenericList<T, P, N, G>
+{
+}
 
-impl<T: Clone + PartialOrd, P: PointerFamily, const N: usize> PartialOrd for GenericList<T, P, N> {
+impl<T: Clone + PartialOrd, P: PointerFamily, const N: usize, const G: usize> PartialOrd
+    for GenericList<T, P, N, G>
+{
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.iter().partial_cmp(other.iter())
     }
 }
 
-impl<T: Clone + Ord, P: PointerFamily, const N: usize> Ord for GenericList<T, P, N> {
+impl<T: Clone + Ord, P: PointerFamily, const N: usize, const G: usize> Ord
+    for GenericList<T, P, N, G>
+{
     fn cmp(&self, other: &Self) -> Ordering {
         self.iter().cmp(other.iter())
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize> std::ops::Add for GenericList<T, P, N> {
-    type Output = GenericList<T, P, N>;
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> std::ops::Add
+    for GenericList<T, P, N, G>
+{
+    type Output = GenericList<T, P, N, G>;
 
     /// Concatenate two lists
     fn add(self, other: Self) -> Self::Output {
@@ -600,8 +628,10 @@ impl<T: Clone, P: PointerFamily, const N: usize> std::ops::Add for GenericList<T
     }
 }
 
-impl<'a, T: Clone, P: PointerFamily, const N: usize> std::ops::Add for &'a GenericList<T, P, N> {
-    type Output = GenericList<T, P, N>;
+impl<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> std::ops::Add
+    for &'a GenericList<T, P, N, G>
+{
+    type Output = GenericList<T, P, N, G>;
 
     /// Concatenate two lists
     fn add(self, other: Self) -> Self::Output {
@@ -609,7 +639,9 @@ impl<'a, T: Clone, P: PointerFamily, const N: usize> std::ops::Add for &'a Gener
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize> std::iter::Sum for GenericList<T, P, N> {
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> std::iter::Sum
+    for GenericList<T, P, N, G>
+{
     fn sum<I>(it: I) -> Self
     where
         I: Iterator<Item = Self>,
@@ -618,8 +650,8 @@ impl<T: Clone, P: PointerFamily, const N: usize> std::iter::Sum for GenericList<
     }
 }
 
-impl<T: Clone + std::hash::Hash, P: PointerFamily, const N: usize> std::hash::Hash
-    for GenericList<T, P, N>
+impl<T: Clone + std::hash::Hash, P: PointerFamily, const N: usize, const G: usize> std::hash::Hash
+    for GenericList<T, P, N, G>
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         for i in self {
@@ -628,7 +660,9 @@ impl<T: Clone + std::hash::Hash, P: PointerFamily, const N: usize> std::hash::Ha
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize> std::ops::Index<usize> for GenericList<T, P, N> {
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> std::ops::Index<usize>
+    for GenericList<T, P, N, G>
+{
     type Output = T;
     /// Get a reference to the value at index `index` in the vector.
     ///
