@@ -252,14 +252,10 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 
     // Just pop off the internal value and move the index up
     pub fn pop_front(&mut self) -> Option<T> {
-        dbg!(self.size());
         let cell = P::make_mut(&mut self.0);
         let elements = P::make_mut(&mut cell.elements);
 
         let ret = elements.pop();
-
-        dbg!(ret.is_some());
-        dbg!(cell.index);
 
         if ret.is_some() {
             cell.index -= 1;
@@ -498,8 +494,6 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
     // This _does_ create a boxed representation of the next item. Its possible we don't actually
     // need to do this, but for now we do
     fn cdr(&self) -> Option<UnrolledList<T, P, N, G>> {
-        dbg!(self.index);
-        dbg!(self.elements.len());
         if self.index > 1 {
             Some(UnrolledList(P::new(self.advance_cursor())))
         } else {
@@ -782,17 +776,9 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> FromIterator<T>
                         let mut elements = x;
                         elements.reverse();
 
-                        // dbg!(elements.len());
-
                         if i > 0 {
                             chunk_size *= UnrolledCell::<T, P, N, G>::GROWTH_RATE;
                         }
-
-                        // if elements.len() > chunk_size {
-                        //     chunk_size *= UnrolledCell::<T, P, N, G>::GROWTH_RATE;
-                        // }
-
-                        dbg!(chunk_size);
 
                         UnrolledList(P::new(UnrolledCell {
                             index: elements.len(),
@@ -830,8 +816,6 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
         // Links up the nodes
         let mut nodes: Vec<_> = iter.into_iter().collect();
 
-        dbg!(nodes.len());
-
         let mut rev_iter = (0..nodes.len()).rev();
         rev_iter.next();
 
@@ -840,8 +824,6 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
             let mut prev = nodes.pop().unwrap();
 
             if let Some(UnrolledList(cell)) = nodes.get_mut(i) {
-                dbg!(prev.size());
-
                 // Check if this node can fit entirely into the previous one
                 if cell.elements.len() + prev.0.elements.len() <= cell.size {
                     let left_inner = P::make_mut(cell);
@@ -872,7 +854,6 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
                     // Update this node to now point to the right nodes tail
                     std::mem::swap(&mut left_inner.next, &mut right_inner.next);
                 } else {
-                    dbg!("Node cannot make it here");
                     P::make_mut(cell).next = Some(prev);
                 }
             } else {
@@ -1258,14 +1239,6 @@ mod vlist_iterator_tests {
 
         list = list.append(vec![0, 0, 0, 0, 0].into_iter().collect());
 
-        for node in list.node_iter() {
-            // dbg!(node);
-            dbg!(node.elements());
-        }
-
-        dbg!(&list);
-        dbg!(list.cdr());
-
         assert_eq!(list.cdr().unwrap().len(), 4);
     }
 
@@ -1282,16 +1255,6 @@ mod vlist_iterator_tests {
             .into_iter()
             .collect(),
         );
-
-        for node in list.node_iter() {
-            dbg!(node.elements());
-        }
-
-        dbg!(list.len());
-        println!("{:?}", list.pop_front());
-        println!("{:?}", list);
-
-        dbg!(list.len());
 
         assert_eq!(list.len(), 20);
     }
