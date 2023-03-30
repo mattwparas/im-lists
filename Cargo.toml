@@ -1,19 +1,18 @@
 [package]
 name = "im-lists"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["mattwparas <matthewparas2020@u.northwestern.edu>"]
-edition = "2018"
+edition = "2021"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mattwparas/im-lists"
-keywords = ["immutable", "unrolled-linked-list", "persistent", "list", "linked-list"]
-description = "Persistent unrolled linked lists"
+keywords = ["immutable", "unrolled-linked-list", "persistent", "list", "linked-list", "vlist"]
+description = "Persistent unrolled linked lists and vlists"
 categories = ["data-structures"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-itertools = "0.10.1"
 
 [dev-dependencies]
 criterion = "0.3.5"

@@ -3,7 +3,6 @@ mod proptests;
 
 use crate::shared::PointerFamily;
 
-use itertools::Itertools;
 use std::cmp::Ordering;
 use std::iter::{FlatMap, FromIterator, Rev};
 use std::marker::PhantomData;
@@ -732,80 +731,44 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> FromIterator<T>
     for UnrolledList<T, P, N, G>
 {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        if G == 1 {
-            let mut pairs: Vec<UnrolledList<_, _, N, G>> = iter
-                .into_iter()
-                .chunks(N)
-                .into_iter()
-                .map(|x| {
-                    // TODO: Hopefully this actually collects into a vector with the correct capacity
-                    let mut elements: Vec<_> = x.collect();
+        let mut chunk_size = N;
+
+        let mut pairs: Vec<UnrolledList<_, _, N, G>> =
+            ExponentialChunks::<_, G>::new(iter.into_iter(), N)
+                .enumerate()
+                .map(|(i, x)| {
+                    let mut elements = x;
                     elements.reverse();
+
+                    if i > 0 {
+                        chunk_size *= UnrolledCell::<T, P, N, G>::GROWTH_RATE;
+                    }
+
                     UnrolledList(P::new(UnrolledCell {
                         index: elements.len(),
                         elements: P::new(elements),
                         next: None,
-                        size: N,
+                        size: chunk_size,
                     }))
                 })
                 .collect();
 
-            let mut rev_iter = (0..pairs.len()).rev();
-            rev_iter.next();
+        let mut rev_iter = (0..pairs.len()).rev();
+        rev_iter.next();
 
-            for i in rev_iter {
-                let prev = pairs.pop().unwrap();
+        for i in rev_iter {
+            let prev = pairs.pop().unwrap();
 
-                if let Some(UnrolledList(cell)) = pairs.get_mut(i) {
-                    P::get_mut::<UnrolledCell<T, P, N, G>>(cell)
-                        .expect("Only one owner allowed in construction")
-                        .next = Some(prev);
-                } else {
-                    unreachable!()
-                }
+            if let Some(UnrolledList(cell)) = pairs.get_mut(i) {
+                P::get_mut::<UnrolledCell<T, P, N, G>>(cell)
+                    .expect("Only one owner allowed in construction")
+                    .next = Some(prev);
+            } else {
+                unreachable!()
             }
-
-            pairs.pop().unwrap_or_else(Self::new)
-        } else {
-            let mut chunk_size = N;
-
-            let mut pairs: Vec<UnrolledList<_, _, N, G>> =
-                ExponentialChunks::<_, G>::new(iter.into_iter(), N)
-                    .enumerate()
-                    .map(|(i, x)| {
-                        let mut elements = x;
-                        elements.reverse();
-
-                        if i > 0 {
-                            chunk_size *= UnrolledCell::<T, P, N, G>::GROWTH_RATE;
-                        }
-
-                        UnrolledList(P::new(UnrolledCell {
-                            index: elements.len(),
-                            elements: P::new(elements),
-                            next: None,
-                            size: chunk_size,
-                        }))
-                    })
-                    .collect();
-
-            let mut rev_iter = (0..pairs.len()).rev();
-            rev_iter.next();
-
-            for i in rev_iter {
-                let prev = pairs.pop().unwrap();
-
-                if let Some(UnrolledList(cell)) = pairs.get_mut(i) {
-                    P::get_mut::<UnrolledCell<T, P, N, G>>(cell)
-                        .expect("Only one owner allowed in construction")
-                        .next = Some(prev);
-                } else {
-                    unreachable!()
-                }
-            }
-
-            pairs.pop().unwrap_or_else(Self::new)
         }
+
+        pairs.pop().unwrap_or_else(Self::new)
     }
 }
 
