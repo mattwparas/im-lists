@@ -3,7 +3,7 @@
 //! This is a sequence of elements, akin to a cons list. The most common operation is to
 //! [`cons`](crate::list::List::cons) to the front (or [`cons_mut`](crate::list::List::cons_mut))
 //! The API is designed to be a drop in replacement for an immutable linked list implementation, with instead the backing
-//! being an unrolled linked list.
+//! being an unrolled linked list or VList, depending on your configuration.
 //!
 //! # Performance Notes
 //!
@@ -22,12 +22,20 @@ use crate::{
 /// This list is suitable for either a single threaded or multi threaded environment. The list accepts the smart pointer
 /// that you would like to use as a type parameter. There are sensible type aliases for implementations that you can use:
 ///
-/// [`SharedList`](crate::list::SharedList) is simply a type alias for `GenericList<T, ArcPointer, 256>`, which is both [`Send`] + [`Sync`]
-/// Similarly, [`List`](crate::list::List) is just a type alias for `GenericList<T, RcPointer, 256>`.
+/// [`SharedList`](crate::list::SharedList) is simply a type alias for `GenericList<T, ArcPointer, 256, 1>`, which is both [`Send`] + [`Sync`]
+/// Similarly, [`List`](crate::list::List) is just a type alias for `GenericList<T, RcPointer, 256, 1>`. [`SharedVList`](crate::list::SharedVList) and
+/// [`VList`](crate::list::VList) are type aliases, as well, using the same backing of `GenericList`, however they have a growth factor of 2 - meaning
+/// bucket sizes will grow exponentially.
 ///
 /// It's implemented as an unrolled linked list, which is a single linked list which stores a variable
-/// amount of elements in each node. The capacity of any individual node for now is set to to be 256 elements, which means that until more than 256 elements
-/// are cons'd onto a list, it will remain a vector under the hood.
+/// amount of elements in each node. The capacity of any individual node for now is set to to be `N` elements, which means that until more than `N` elements
+/// are cons'd onto a list, it will remain a vector under the hood. By default, N is sset to 256. There is also a growth rate, `G`, which describes how
+/// each successive node will grow in size. With `N = 2`, and `G = 2`, the list will look something like this:
+///
+/// ```
+/// [0, 1] -> [2, 3, 4, 5] -> [6, 7, 8, 9, 10, 11, 12, 13] -> ...
+///
+/// ```
 ///
 /// The list is also designed to leverage in place mutations whenever possible - if the number of references pointing to either a cell containing a vector
 /// or the shared vector is one, then that mutation is done in place. Otherwise, it is copy-on-write, maintaining our persistent invariant.
@@ -36,14 +44,15 @@ use crate::{
 ///
 /// The algorithmic complexity of an unrolled linked list matches that of a normal linked list - however in practice
 /// we have a decrease by the factor of the capacity of a node that gives us practical
-/// performance wins. For a list that is fully filled, iteration becomes O(n / 256), rather than the typical O(n).
+/// performance wins. For a list that is fully filled, iteration over nodes becomes O(n / N), rather than the typical O(n). If the growth rate is set to 2 (or more),
+/// over individual nodes becomes O(log(n)) - which means indexing or finding the last element is O(log(n)) as well.
 /// In addition, the unrolled linked list is able to avoid the costly cache misses that a typical linked list
 /// suffers from, seeing very realistic performance gains.
 ///
 /// Let *n* be the number of elements in the list, and *m* is the capacity of a node.
 /// In the worst case, a node will be on average half filled. In the best case, all nodes are completely full.
 /// This means for operations that for a normal linked list may take linear time *Θ(n)*, we get a constant factor
-/// decrease of either a factor of *m* or *m / 2*.
+/// decrease of either a factor of *m* or *m / 2*. Similarly, we will see O(log(n)) performance characteristics if the growth rate is set to be larger than 1.
 pub struct GenericList<
     T: Clone,
     P: PointerFamily = RcPointer,
@@ -53,6 +62,9 @@ pub struct GenericList<
 
 pub type SharedList<T> = GenericList<T, ArcPointer, 256>;
 pub type List<T> = GenericList<T, RcPointer, 256>;
+
+pub type SharedVList<T> = GenericList<T, ArcPointer, 2, 2>;
+pub type VList<T> = GenericList<T, RcPointer, 2, 2>;
 
 impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Clone for GenericList<T, P, N, G> {
     fn clone(&self) -> Self {
