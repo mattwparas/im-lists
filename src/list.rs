@@ -696,7 +696,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> std::ops::Index
 mod tests {
 
     use super::*;
-    use crate::list;
+    use crate::{list, vlist};
 
     #[test]
     fn strong_count() {
@@ -919,5 +919,42 @@ mod tests {
 
         let no_list = list.tail(100);
         assert!(no_list.is_none())
+    }
+
+    #[test]
+    fn indexing() {
+        let list = vlist![0, 1, 2, 3, 4, 5];
+
+        assert_eq!(4, list[4]);
+    }
+
+    #[test]
+    fn hash() {
+        let mut map = std::collections::HashMap::new();
+
+        map.insert(vlist![0, 1, 2, 3, 4, 5], "hello world!");
+
+        assert_eq!(
+            map.get(&vlist![0, 1, 2, 3, 4, 5]).copied(),
+            Some("hello world!")
+        );
+    }
+
+    #[test]
+    fn addition() {
+        let l = vlist![0, 1, 2, 3, 4, 5];
+        let r = vlist![6, 7, 8, 9, 10];
+
+        let combined = l + r;
+
+        assert_eq!(combined, vlist![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    }
+
+    #[test]
+    fn from_slice() {
+        let slice: &[usize] = &[0, 1, 2, 3, 4, 5];
+        let list: VList<usize> = vlist![0, 1, 2, 3, 4, 5];
+
+        assert_eq!(list, slice.into());
     }
 }

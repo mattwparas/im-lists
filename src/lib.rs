@@ -20,6 +20,22 @@ macro_rules! list {
     }};
 }
 
+/// Construct a [`VList`](crate::list::VList) from a sequence of elements
+#[macro_export]
+macro_rules! vlist {
+    () => { $crate::list::VList::new() };
+
+    ( $($x:expr),* ) => {{
+        vec![$(
+            $x,
+        ) *].into_iter().collect::<$crate::list::VList<_>>()
+    }};
+
+    ( $($x:expr ,)* ) => {{
+        vec![$($x)*].into_iter().collect::<$crate::list::VList<_>>()
+    }};
+}
+
 /// Construct a [`SharedList`](crate::list::SharedList) from a sequence of elements
 #[macro_export]
 macro_rules! shared_list {
@@ -33,5 +49,21 @@ macro_rules! shared_list {
 
     ( $($x:expr ,)* ) => {{
         vec![$($x)*].into_iter().collect::<$crate::list::SharedList<_>>()
+    }};
+}
+
+/// Construct a [`SharedList`](crate::list::SharedList) from a sequence of elements
+#[macro_export]
+macro_rules! shared_vlist {
+    () => { $crate::list::SharedVList::new() };
+
+    ( $($x:expr),* ) => {{
+        vec![$(
+            $x,
+        ) *].into_iter().collect::<$crate::list::SharedVList<_>>()
+    }};
+
+    ( $($x:expr ,)* ) => {{
+        vec![$($x)*].into_iter().collect::<$crate::list::SharedVList<_>>()
     }};
 }
