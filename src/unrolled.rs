@@ -305,7 +305,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 
     #[cfg(test)]
     fn does_node_satisfy_invariant(&self) -> bool {
-        self.elements().len() <= N
+        self.elements().len() <= self.size()
     }
 
     #[cfg(test)]
@@ -1243,7 +1243,7 @@ mod vlist_iterator_tests {
     }
 
     #[test]
-    fn append_then_push_front() {
+    fn append_then_pop_front() {
         let mut list: UnrolledList<usize, RcPointer, 4, 4> = Vec::<usize>::new()
             .into_iter()
             .collect::<UnrolledList<_, _, 4, 4>>();
@@ -1256,41 +1256,10 @@ mod vlist_iterator_tests {
             .collect(),
         );
 
+        list.pop_front();
+
         assert_eq!(list.len(), 20);
     }
-
-    // // TODO verify that this is actually what we want to happen
-    // // In some ways this might not be the performance that we want
-    // // Profile to make sure
-    // #[test]
-    // fn node_appending_coalescing_works() {
-    //     // This should be:
-    //     // [3, 2, 1, 0]
-    //     // [11, 10, 9, 8, 7, 6, 5, 4]
-    //     // [27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12]
-    //     // [31, 30, 29, 28]
-    //     let mut left: RcList<_> = (0..CAPACITY * 8).into_iter().collect();
-
-    //     // for node in left.node_iter() {
-    //     //     println!("{:?}", node.elements())
-    //     // }
-
-    //     // // 400
-    //     let right: RcList<_> = (CAPACITY * 8..CAPACITY * 8 + 100).into_iter().collect();
-
-    //     left = left.append(right);
-
-    //     for node in left.node_iter() {
-    //         println!("{:?}", node.elements())
-    //     }
-
-    //     // Should have 4 nodes at this point
-    //     assert_eq!(left.node_iter().count(), 4);
-
-    //     // // 300 should be at 300
-    //     // assert_eq!(*left.get(300).unwrap(), 300);
-    //     // left.assert_list_invariants();
-    // }
 
     #[test]
     fn length() {
