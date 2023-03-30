@@ -1,9 +1,6 @@
 #[cfg(test)]
 mod proptests;
 
-#[cfg(test)]
-mod vlist_proptests;
-
 use crate::shared::PointerFamily;
 
 use itertools::Itertools;
@@ -237,7 +234,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
                 index: 1,
                 elements: P::new(vec![value]),
                 next: Some(self.clone()),
-                size: self.size() * G,
+                size: self.size() * UnrolledCell::<T, P, N, G>::GROWTH_RATE,
             }));
 
             std::mem::swap(self, &mut default);
@@ -255,10 +252,14 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 
     // Just pop off the internal value and move the index up
     pub fn pop_front(&mut self) -> Option<T> {
+        dbg!(self.size());
         let cell = P::make_mut(&mut self.0);
         let elements = P::make_mut(&mut cell.elements);
 
         let ret = elements.pop();
+
+        dbg!(ret.is_some());
+        dbg!(cell.index);
 
         if ret.is_some() {
             cell.index -= 1;
@@ -466,6 +467,8 @@ impl<T: Clone + std::fmt::Debug, P: PointerFamily, const N: usize, const G: usiz
 }
 
 impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T, P, N, G> {
+    const GROWTH_RATE: usize = if G == 0 { 1 } else { G };
+
     fn new() -> Self {
         UnrolledCell {
             index: 0,
@@ -495,6 +498,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
     // This _does_ create a boxed representation of the next item. Its possible we don't actually
     // need to do this, but for now we do
     fn cdr(&self) -> Option<UnrolledList<T, P, N, G>> {
+        dbg!(self.index);
+        dbg!(self.elements.len());
         if self.index > 1 {
             Some(UnrolledList(P::new(self.advance_cursor())))
         } else {
@@ -538,7 +543,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
                 index: 1,
                 elements: P::new(vec![value]),
                 next: Some(cdr),
-                size: size * G,
+                size: size * Self::GROWTH_RATE,
             }))
         } else {
             let inner = P::make_mut(&mut cdr.0);
@@ -772,13 +777,22 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> FromIterator<T>
 
             let mut pairs: Vec<UnrolledList<_, _, N, G>> =
                 ExponentialChunks::<_, G>::new(iter.into_iter(), N)
-                    .map(|x| {
+                    .enumerate()
+                    .map(|(i, x)| {
                         let mut elements = x;
                         elements.reverse();
 
-                        if elements.len() > chunk_size {
-                            chunk_size *= G;
+                        // dbg!(elements.len());
+
+                        if i > 0 {
+                            chunk_size *= UnrolledCell::<T, P, N, G>::GROWTH_RATE;
                         }
+
+                        // if elements.len() > chunk_size {
+                        //     chunk_size *= UnrolledCell::<T, P, N, G>::GROWTH_RATE;
+                        // }
+
+                        dbg!(chunk_size);
 
                         UnrolledList(P::new(UnrolledCell {
                             index: elements.len(),
@@ -816,6 +830,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
         // Links up the nodes
         let mut nodes: Vec<_> = iter.into_iter().collect();
 
+        dbg!(nodes.len());
+
         let mut rev_iter = (0..nodes.len()).rev();
         rev_iter.next();
 
@@ -824,8 +840,10 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
             let mut prev = nodes.pop().unwrap();
 
             if let Some(UnrolledList(cell)) = nodes.get_mut(i) {
+                dbg!(prev.size());
+
                 // Check if this node can fit entirely into the previous one
-                if cell.elements.len() + prev.0.elements.len() < N {
+                if cell.elements.len() + prev.0.elements.len() <= cell.size {
                     let left_inner = P::make_mut(cell);
                     let right_inner = P::make_mut(&mut prev.0);
 
@@ -854,6 +872,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
                     // Update this node to now point to the right nodes tail
                     std::mem::swap(&mut left_inner.next, &mut right_inner.next);
                 } else {
+                    dbg!("Node cannot make it here");
                     P::make_mut(cell).next = Some(prev);
                 }
             } else {
@@ -989,6 +1008,10 @@ mod iterator_tests {
         let right: RcList<_> = (CAPACITY + 100..CAPACITY + 500).into_iter().collect();
 
         left = left.append(right);
+
+        for node in left.node_iter() {
+            println!("{:?}", node.elements().len());
+        }
 
         // Should have 4 nodes at this point
         assert_eq!(left.node_iter().count(), 4);
@@ -1220,26 +1243,90 @@ mod vlist_iterator_tests {
         assert_eq!(list.into_iter().count(), count)
     }
 
+    #[test]
+    fn appending_works_as_expected() {
+        let mut list: RcList<usize> = Vec::<usize>::new().into_iter().collect::<RcList<_>>();
+
+        list = list.append(vec![0, 0, 0, 0].into_iter().collect());
+
+        assert_eq!(list.cdr().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn appending_works_as_expected_overflow() {
+        let mut list: RcList<usize> = Vec::<usize>::new().into_iter().collect::<RcList<_>>();
+
+        list = list.append(vec![0, 0, 0, 0, 0].into_iter().collect());
+
+        for node in list.node_iter() {
+            // dbg!(node);
+            dbg!(node.elements());
+        }
+
+        dbg!(&list);
+        dbg!(list.cdr());
+
+        assert_eq!(list.cdr().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn append_then_push_front() {
+        let mut list: UnrolledList<usize, RcPointer, 4, 4> = Vec::<usize>::new()
+            .into_iter()
+            .collect::<UnrolledList<_, _, 4, 4>>();
+
+        list = list.append(
+            vec![
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ]
+            .into_iter()
+            .collect(),
+        );
+
+        for node in list.node_iter() {
+            dbg!(node.elements());
+        }
+
+        dbg!(list.len());
+        println!("{:?}", list.pop_front());
+        println!("{:?}", list);
+
+        dbg!(list.len());
+
+        assert_eq!(list.len(), 20);
+    }
+
     // // TODO verify that this is actually what we want to happen
     // // In some ways this might not be the performance that we want
     // // Profile to make sure
     // #[test]
     // fn node_appending_coalescing_works() {
-    //     // 356
-    //     // 256 + 100
-    //     let mut left: RcList<_> = (0..CAPACITY + 100).into_iter().collect();
+    //     // This should be:
+    //     // [3, 2, 1, 0]
+    //     // [11, 10, 9, 8, 7, 6, 5, 4]
+    //     // [27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12]
+    //     // [31, 30, 29, 28]
+    //     let mut left: RcList<_> = (0..CAPACITY * 8).into_iter().collect();
 
-    //     // 400
-    //     let right: RcList<_> = (CAPACITY + 100..CAPACITY + 500).into_iter().collect();
+    //     // for node in left.node_iter() {
+    //     //     println!("{:?}", node.elements())
+    //     // }
+
+    //     // // 400
+    //     let right: RcList<_> = (CAPACITY * 8..CAPACITY * 8 + 100).into_iter().collect();
 
     //     left = left.append(right);
+
+    //     for node in left.node_iter() {
+    //         println!("{:?}", node.elements())
+    //     }
 
     //     // Should have 4 nodes at this point
     //     assert_eq!(left.node_iter().count(), 4);
 
-    //     // 300 should be at 300
-    //     assert_eq!(*left.get(300).unwrap(), 300);
-    //     left.assert_list_invariants();
+    //     // // 300 should be at 300
+    //     // assert_eq!(*left.get(300).unwrap(), 300);
+    //     // left.assert_list_invariants();
     // }
 
     #[test]

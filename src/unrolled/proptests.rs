@@ -1,16 +1,5 @@
 use proptest::prelude::*;
 
-use super::*;
-use crate::shared::RcPointer;
-
-// Define strategies here for property tests
-type List<T> = UnrolledList<T, RcPointer, 256>;
-
-// Defines an arbitrary list containing elements from -10000 to 10000
-fn list_strategy_from_iterator() -> impl Strategy<Value = List<isize>> {
-    prop::collection::vec(-10000..10000isize, 0..10000).prop_map(|x| x.into_iter().collect())
-}
-
 // Generate arbitrary sequence of manipulations to both a vector and a list
 // Apply those manipulations in order, then check that the state of both is the same
 // If the state of the resulting is the same AND the invariants of the list hold, we're good
@@ -61,47 +50,12 @@ impl Action {
             }
         }
     }
-
-    fn act_on_list(self, mut list: List<usize>) -> List<usize> {
-        // println!("Action: {:?}, List: {:?}", self, list);
-        match self {
-            Action::Cons(value) => {
-                list.cons_mut(value);
-                list
-            }
-            Action::Cdr => list.cdr().unwrap_or(List::new()),
-            Action::Append(right) => {
-                list.extend(right);
-                list
-            }
-            Action::Reverse => list.reverse(),
-            Action::PushBack(value) => {
-                list.push_back(value);
-                list
-            }
-            Action::PopFront => {
-                // println!("Before pop: {:?}", list);
-                // println!("list elements: {:?}", list.elements());
-                list.pop_front();
-                // println!("After pop: {:?}", list);
-                // println!("list elements: {:?}", list.elements());
-                list
-            }
-        }
-    }
 }
 
 fn crunch_actions_for_vec(initial: Vec<usize>, actions: Vec<Action>) -> Vec<usize> {
     actions
         .into_iter()
         .fold(initial, |vec, action| action.act_on_vector(vec))
-}
-
-fn crunch_actions_for_list(initial: List<usize>, actions: Vec<Action>) -> List<usize> {
-    actions.into_iter().fold(initial, |list, action| {
-        let res = action.act_on_list(list);
-        res
-    })
 }
 
 fn action_strategy() -> impl Strategy<Value = Action> {
@@ -123,6 +77,63 @@ fn actions_strategy() -> impl Strategy<Value = Vec<Action>> {
 fn vec_strategy() -> impl Strategy<Value = Vec<usize>> {
     prop::collection::vec(0..10000usize, 0..256 * 3)
 }
+
+macro_rules! run_property_tests {
+    ($name:tt, $type:ty) => {
+
+mod $name {
+
+use proptest::prelude::*;
+
+// use super::*;
+use crate::shared::RcPointer;
+
+use super::*;
+
+// Define strategies here for property tests
+// type List<T> = UnrolledList<T, RcPointer, 256>;
+type List<T> = $type;
+
+// Defines an arbitrary list containing elements from -10000 to 10000
+fn list_strategy_from_iterator() -> impl Strategy<Value = List<isize>> {
+    prop::collection::vec(-10000..10000isize, 0..10000).prop_map(|x| x.into_iter().collect())
+}
+
+
+fn act_on_list(action: Action, mut list: List<usize>) -> List<usize> {
+    // println!("Action: {:?}, List: {:?}", self, list);
+    match action {
+        Action::Cons(value) => {
+            list.cons_mut(value);
+            list
+        }
+        Action::Cdr => list.cdr().unwrap_or(List::new()),
+        Action::Append(right) => {
+            list.extend(right);
+            list
+        }
+        Action::Reverse => list.reverse(),
+        Action::PushBack(value) => {
+            list.push_back(value);
+            list
+        }
+        Action::PopFront => {
+            list.pop_front();
+            list
+        }
+    }
+}
+
+
+
+fn crunch_actions_for_list(initial: List<usize>, actions: Vec<Action>) -> List<usize> {
+    actions.into_iter().fold(initial, |list, action| {
+        let res = act_on_list(action, list);
+        res
+    })
+}
+
+
 
 proptest! {
     // The next line modifies the number of tests.
@@ -508,3 +519,35 @@ fn test_case_with_pop_front() {
 
     random_test_runner(vec, actions);
 }
+
+#[test]
+fn append_zero_then_cdr() {
+    use Action::*;
+
+    let vec = vec![];
+
+    let actions = vec![Append(vec![0, 0, 0, 0]), Cdr];
+
+    random_test_runner(vec, actions);
+}
+
+#[test]
+fn append_zero_then_popfront() {
+    use Action::*;
+
+    let vec = vec![];
+
+    let actions = vec![Append(vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), PopFront];
+
+    random_test_runner(vec, actions);
+}
+
+}
+    }
+}
+
+run_property_tests!(unrolled_linked_list, crate::unrolled::UnrolledList<T, RcPointer, 256>);
+
+run_property_tests!(vlist, crate::unrolled::UnrolledList<T, RcPointer, 4, 2>);
+
+run_property_tests!(vlist_growth_rate_4, crate::unrolled::UnrolledList<T, RcPointer, 4, 4>);
