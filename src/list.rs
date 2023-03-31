@@ -476,6 +476,14 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> FromIterator<T>
     }
 }
 
+impl<'a, T: 'a + Clone, P: PointerFamily, const N: usize, const G: usize> FromIterator<&'a T>
+    for GenericList<T, P, N, G>
+{
+    fn from_iter<I: IntoIterator<Item = &'a T>>(iter: I) -> Self {
+        GenericList(iter.into_iter().cloned().collect())
+    }
+}
+
 impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
     FromIterator<GenericList<T, P, N, G>> for GenericList<T, P, N, G>
 {
@@ -997,6 +1005,26 @@ mod tests {
         assert_eq!(
             combined,
             vlist![0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
+        );
+    }
+
+    #[test]
+    fn from_iterator_group_lists() {
+        let iter = vec![
+            vlist![0, 1, 2, 3, 4],
+            vlist![0, 1, 2, 3, 4],
+            vlist![0, 1, 2, 3, 4],
+        ];
+
+        let combined = iter.iter().collect::<VList<VList<usize>>>();
+
+        assert_eq!(
+            combined,
+            vlist![
+                vlist![0, 1, 2, 3, 4],
+                vlist![0, 1, 2, 3, 4],
+                vlist![0, 1, 2, 3, 4]
+            ]
         );
     }
 }
