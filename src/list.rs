@@ -480,7 +480,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
     FromIterator<GenericList<T, P, N, G>> for GenericList<T, P, N, G>
 {
     fn from_iter<I: IntoIterator<Item = GenericList<T, P, N, G>>>(iter: I) -> Self {
-        GenericList(iter.into_iter().map(|x| x.0).collect())
+        GenericList(
+            iter.into_iter()
+                .flat_map(|x| x.0.into_node_iter())
+                .collect(),
+        )
     }
 }
 
@@ -694,6 +698,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> std::ops::Index
 
 #[cfg(test)]
 mod tests {
+
+    use std::ops::Add;
 
     use super::*;
     use crate::{list, vlist};
@@ -945,7 +951,11 @@ mod tests {
         let l = vlist![0, 1, 2, 3, 4, 5];
         let r = vlist![6, 7, 8, 9, 10];
 
-        let combined = l + r;
+        let combined = l.clone() + r.clone();
+
+        assert_eq!(combined, vlist![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+        let combined = l.add(r);
 
         assert_eq!(combined, vlist![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     }
@@ -956,5 +966,37 @@ mod tests {
         let list: VList<usize> = vlist![0, 1, 2, 3, 4, 5];
 
         assert_eq!(list, slice.into());
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_out_of_bounds() {
+        let list: VList<usize> = vlist![0, 1, 2, 3, 4];
+
+        list[5];
+    }
+
+    #[test]
+    fn ordering() {
+        let l: VList<usize> = vlist![0, 1, 2, 3, 4];
+        let r: VList<usize> = vlist![1, 2, 3, 4, 5];
+
+        assert!(l < r);
+    }
+
+    #[test]
+    fn from_iterator() {
+        let iter = vec![
+            vlist![0, 1, 2, 3, 4],
+            vlist![0, 1, 2, 3, 4],
+            vlist![0, 1, 2, 3, 4],
+        ];
+
+        let combined = iter.iter().collect::<VList<usize>>();
+
+        assert_eq!(
+            combined,
+            vlist![0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
+        );
     }
 }

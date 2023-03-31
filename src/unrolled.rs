@@ -312,14 +312,14 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         assert!(self.does_node_satisfy_invariant())
     }
 
-    fn into_node_iter(self) -> NodeIter<T, P, N, G> {
+    pub(crate) fn into_node_iter(self) -> NodeIter<T, P, N, G> {
         NodeIter {
             cur: Some(self),
             _inner: PhantomData,
         }
     }
 
-    fn node_iter(&self) -> NodeIterRef<'_, T, P, N, G> {
+    pub(crate) fn node_iter(&self) -> NodeIterRef<'_, T, P, N, G> {
         NodeIterRef {
             cur: Some(self),
             _inner: PhantomData,
