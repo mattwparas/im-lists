@@ -1027,4 +1027,346 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn to_string_works_as_intended() {
+        let list = vlist![1, 2, 3, 4, 5];
+
+        assert_eq!("[1, 2, 3, 4, 5]", format!("{:?}", list));
+    }
+}
+
+#[cfg(test)]
+mod arc_tests {
+
+    use std::ops::Add;
+
+    use super::*;
+    use crate::{shared_list, shared_vlist};
+
+    #[test]
+    fn strong_count() {
+        let list: SharedList<usize> = SharedList::new();
+        assert_eq!(list.strong_count(), 1);
+    }
+
+    #[test]
+    fn ptr_eq() {
+        let left: SharedList<usize> = shared_list![1, 2, 3, 4, 5];
+        let right: SharedList<usize> = shared_list![1, 2, 3, 4, 5];
+
+        assert!(!left.ptr_eq(&right));
+
+        let left_clone: SharedList<usize> = left.clone();
+        assert!(left.ptr_eq(&left_clone))
+    }
+
+    #[test]
+    fn len() {
+        let list = shared_list![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        assert_eq!(list.len(), 10);
+    }
+
+    #[test]
+    fn reverse() {
+        let list = shared_list![1, 2, 3, 4, 5].reverse();
+        assert_eq!(list, shared_list![5, 4, 3, 2, 1]);
+    }
+
+    #[test]
+    fn last() {
+        let list = shared_list![1, 2, 3, 4, 5];
+        assert_eq!(list.last().cloned(), Some(5));
+    }
+
+    #[test]
+    fn car() {
+        let list = shared_list![1, 2, 3, 4, 5];
+        let car = list.car();
+        assert_eq!(car, Some(1));
+
+        let list: SharedList<usize> = shared_list![];
+        let car = list.car();
+        assert!(car.is_none());
+    }
+
+    #[test]
+    fn first() {
+        let list = shared_list![1, 2, 3, 4, 5];
+        let car = list.first();
+        assert_eq!(car.cloned(), Some(1));
+
+        let list: SharedList<usize> = shared_list![];
+        let car = list.first();
+        assert!(car.is_none());
+    }
+
+    #[test]
+    fn cdr() {
+        let list = shared_list![1, 2, 3, 4, 5];
+        let cdr = list.cdr().unwrap();
+        assert_eq!(cdr, shared_list![2, 3, 4, 5]);
+        let list = shared_list![5];
+        let cdr = list.cdr();
+        assert!(cdr.is_none());
+    }
+
+    #[test]
+    fn cdr_mut() {
+        let mut list = shared_list![1, 2, 3, 4, 5];
+        list.cdr_mut().expect("This list has a tail");
+        assert_eq!(list, shared_list![2, 3, 4, 5]);
+
+        let mut list = shared_list![1, 2, 3];
+        assert!(list.cdr_mut().is_some());
+        assert_eq!(list, shared_list![2, 3]);
+        assert!(list.cdr_mut().is_some());
+        assert_eq!(list, shared_list![3]);
+        assert!(list.cdr_mut().is_none());
+        assert_eq!(list, shared_list![]);
+    }
+
+    #[test]
+    fn rest_mut() {
+        let mut list = shared_list![1, 2, 3, 4, 5];
+        list.rest_mut().expect("This list has a tail");
+        assert_eq!(list, shared_list![2, 3, 4, 5]);
+
+        let mut list = shared_list![1, 2, 3];
+        assert!(list.rest_mut().is_some());
+        assert_eq!(list, shared_list![2, 3]);
+        assert!(list.rest_mut().is_some());
+        assert_eq!(list, shared_list![3]);
+        assert!(list.rest_mut().is_none());
+        assert_eq!(list, shared_list![]);
+    }
+
+    #[test]
+    fn cons() {
+        let list = SharedList::cons(
+            1,
+            SharedList::cons(
+                2,
+                SharedList::cons(3, SharedList::cons(4, SharedList::new())),
+            ),
+        );
+        assert_eq!(list, shared_list![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn cons_mut() {
+        let mut list = shared_list![];
+        list.cons_mut(3);
+        list.cons_mut(2);
+        list.cons_mut(1);
+        list.cons_mut(0);
+        assert_eq!(list, shared_list![0, 1, 2, 3])
+    }
+
+    #[test]
+    fn push_front() {
+        let mut list = shared_list![];
+        list.push_front(3);
+        list.push_front(2);
+        list.push_front(1);
+        list.push_front(0);
+        assert_eq!(list, shared_list![0, 1, 2, 3])
+    }
+
+    #[test]
+    fn iter() {
+        assert_eq!(shared_list![1usize, 1, 1, 1, 1].iter().sum::<usize>(), 5);
+    }
+
+    #[test]
+    fn get() {
+        let list = shared_list![1, 2, 3, 4, 5];
+        assert_eq!(list.get(3).cloned(), Some(4));
+        assert!(list.get(1000).is_none());
+    }
+
+    #[test]
+    fn append() {
+        let left = shared_list![1usize, 2, 3];
+        let right = shared_list![4usize, 5, 6];
+        assert_eq!(left.append(right), shared_list![1, 2, 3, 4, 5, 6])
+    }
+
+    #[test]
+    fn append_mut() {
+        let mut left = shared_list![1usize, 2, 3];
+        let right = shared_list![4usize, 5, 6];
+        left.append_mut(right);
+        assert_eq!(left, shared_list![1, 2, 3, 4, 5, 6])
+    }
+
+    #[test]
+    fn is_empty() {
+        let mut list = List::new();
+        assert!(list.is_empty());
+        list.cons_mut("applesauce");
+        assert!(!list.is_empty());
+    }
+
+    #[test]
+    fn extend() {
+        let mut list = shared_list![1usize, 2, 3];
+        let vec = vec![4, 5, 6];
+        list.extend(vec);
+        assert_eq!(list, shared_list![1, 2, 3, 4, 5, 6])
+    }
+
+    #[test]
+    fn sort() {
+        let mut list = shared_list![5, 4, 3, 2, 1];
+        list.sort();
+        assert_eq!(list, shared_list![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn sort_by() {
+        let mut list = shared_list![5, 4, 3, 2, 1];
+        list.sort_by(Ord::cmp);
+        assert_eq!(list, shared_list![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn push_back() {
+        let mut list = shared_list![];
+        list.push_back(0);
+        list.push_back(1);
+        list.push_back(2);
+        assert_eq!(list, shared_list![0, 1, 2]);
+    }
+
+    #[test]
+    fn add() {
+        let left = shared_list![1, 2, 3, 4, 5];
+        let right = shared_list![6, 7, 8, 9, 10];
+
+        assert_eq!(left + right, shared_list![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    }
+
+    #[test]
+    fn sum() {
+        let list = vec![
+            shared_list![1, 2, 3],
+            shared_list![4, 5, 6],
+            shared_list![7, 8, 9],
+        ];
+        assert_eq!(
+            list.into_iter().sum::<SharedList<_>>(),
+            shared_list![1, 2, 3, 4, 5, 6, 7, 8, 9]
+        );
+    }
+
+    #[test]
+    fn take() {
+        let list = shared_list![0, 1, 2, 3, 4, 5];
+        let new_list = list.take(3);
+        assert_eq!(new_list, shared_list![0, 1, 2]);
+    }
+
+    #[test]
+    fn tail() {
+        let list = shared_list![0, 1, 2, 3, 4, 5];
+        let new_list = list.tail(2);
+        assert_eq!(new_list.unwrap(), shared_list![2, 3, 4, 5]);
+
+        let no_list = list.tail(100);
+        assert!(no_list.is_none())
+    }
+
+    #[test]
+    fn indexing() {
+        let list = shared_vlist![0, 1, 2, 3, 4, 5];
+
+        assert_eq!(4, list[4]);
+    }
+
+    #[test]
+    fn hash() {
+        let mut map = std::collections::HashMap::new();
+
+        map.insert(shared_vlist![0, 1, 2, 3, 4, 5], "hello world!");
+
+        assert_eq!(
+            map.get(&shared_vlist![0, 1, 2, 3, 4, 5]).copied(),
+            Some("hello world!")
+        );
+    }
+
+    #[test]
+    fn addition() {
+        let l = shared_vlist![0, 1, 2, 3, 4, 5];
+        let r = shared_vlist![6, 7, 8, 9, 10];
+
+        let combined = l.clone() + r.clone();
+
+        assert_eq!(combined, shared_vlist![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+        let combined = l.add(r);
+
+        assert_eq!(combined, shared_vlist![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    }
+
+    #[test]
+    fn from_slice() {
+        let slice: &[usize] = &[0, 1, 2, 3, 4, 5];
+        let list: SharedVList<usize> = shared_vlist![0, 1, 2, 3, 4, 5];
+
+        assert_eq!(list, slice.into());
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_out_of_bounds() {
+        let list: SharedVList<usize> = shared_vlist![0, 1, 2, 3, 4];
+
+        list[5];
+    }
+
+    #[test]
+    fn ordering() {
+        let l: SharedVList<usize> = shared_vlist![0, 1, 2, 3, 4];
+        let r: SharedVList<usize> = shared_vlist![1, 2, 3, 4, 5];
+
+        assert!(l < r);
+    }
+
+    #[test]
+    fn from_iterator() {
+        let iter = vec![
+            shared_vlist![0, 1, 2, 3, 4],
+            shared_vlist![0, 1, 2, 3, 4],
+            shared_vlist![0, 1, 2, 3, 4],
+        ];
+
+        let combined = iter.iter().collect::<SharedVList<usize>>();
+
+        assert_eq!(
+            combined,
+            shared_vlist![0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
+        );
+    }
+
+    #[test]
+    fn from_iterator_group_lists() {
+        let iter = vec![
+            shared_vlist![0, 1, 2, 3, 4],
+            shared_vlist![0, 1, 2, 3, 4],
+            shared_vlist![0, 1, 2, 3, 4],
+        ];
+
+        let combined = iter.iter().collect::<SharedVList<SharedVList<usize>>>();
+
+        assert_eq!(
+            combined,
+            shared_vlist![
+                shared_vlist![0, 1, 2, 3, 4],
+                shared_vlist![0, 1, 2, 3, 4],
+                shared_vlist![0, 1, 2, 3, 4]
+            ]
+        );
+    }
 }
