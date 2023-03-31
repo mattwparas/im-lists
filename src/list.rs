@@ -1034,6 +1034,16 @@ mod tests {
 
         assert_eq!("[1, 2, 3, 4, 5]", format!("{:?}", list));
     }
+
+    #[test]
+    fn cons_grows_as_expected() {
+        let list = vlist![1, 2];
+
+        let list = VList::cons(0, list);
+
+        assert_eq!(vlist![0, 1, 2], list);
+        assert_eq!(2, list.0.node_iter().count());
+    }
 }
 
 #[cfg(test)]
