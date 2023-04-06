@@ -294,7 +294,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         }
     }
 
-    fn elements(&self) -> &[T] {
+    pub(crate) fn elements(&self) -> &[T] {
         &self.0.elements
     }
 
@@ -685,32 +685,52 @@ impl<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterato
     }
 }
 
-struct ExponentialChunks<I, const G: usize>
+struct ExponentialChunks<I, const N: usize, const G: usize>
 where
     I: Iterator,
 {
     iter: I,
     size: usize,
+    length: usize,
+    running_sum: usize,
 }
 
-impl<I, const G: usize> ExponentialChunks<I, G>
+impl<I, const N: usize, const G: usize> ExponentialChunks<I, N, G>
 where
     I: Iterator,
 {
-    fn new(iter: I, size: usize) -> Self {
-        Self { iter, size }
+    fn new(iter: I, length: usize, mut size: usize) -> Self {
+        let mut running_sum = size;
+
+        while running_sum < length {
+            size *= G;
+            running_sum += size;
+        }
+
+        Self {
+            iter,
+            size,
+            length,
+            running_sum: running_sum - size,
+        }
     }
 }
 
-impl<I, const G: usize> Iterator for ExponentialChunks<I, G>
+impl<I, const N: usize, const G: usize> Iterator for ExponentialChunks<I, N, G>
 where
     I: Iterator,
 {
-    type Item = Vec<I::Item>;
+    type Item = (usize, Vec<I::Item>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut chunk = Vec::with_capacity(self.size);
-        for item in self.iter.by_ref().take(self.size) {
+        let chunk_size = if self.length > self.running_sum {
+            self.length - self.running_sum
+        } else {
+            self.size
+        };
+
+        let mut chunk = Vec::with_capacity(chunk_size);
+        for item in self.iter.by_ref().take(chunk_size) {
             chunk.push(item);
         }
 
@@ -719,10 +739,51 @@ where
         }
 
         let result = chunk;
-        self.size *= 2;
+        let size = self.size;
 
-        Some(result)
+        self.size /= G;
+        self.length -= result.len();
+
+        Some((size, result))
     }
+}
+
+fn from_vec<T: Clone, P: PointerFamily, const N: usize, const G: usize>(
+    vec: Vec<T>,
+) -> UnrolledList<T, P, N, G> {
+    let length = vec.len();
+
+    let mut pairs: Vec<UnrolledList<_, _, N, G>> =
+        ExponentialChunks::<_, N, G>::new(vec.into_iter(), length, N)
+            .map(|(size, x)| {
+                let mut elements = x;
+                elements.reverse();
+
+                UnrolledList(P::new(UnrolledCell {
+                    index: elements.len(),
+                    elements: P::new(elements),
+                    next: None,
+                    size,
+                }))
+            })
+            .collect();
+
+    let mut rev_iter = (0..pairs.len()).rev();
+    rev_iter.next();
+
+    for i in rev_iter {
+        let prev = pairs.pop().unwrap();
+
+        if let Some(UnrolledList(cell)) = pairs.get_mut(i) {
+            P::get_mut::<UnrolledCell<T, P, N, G>>(cell)
+                .expect("Only one owner allowed in construction")
+                .next = Some(prev);
+        } else {
+            unreachable!()
+        }
+    }
+
+    pairs.pop().unwrap_or_else(UnrolledList::new)
 }
 
 // and we'll implement FromIterator
@@ -731,44 +792,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> FromIterator<T>
     for UnrolledList<T, P, N, G>
 {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        let mut chunk_size = N;
-
-        let mut pairs: Vec<UnrolledList<_, _, N, G>> =
-            ExponentialChunks::<_, G>::new(iter.into_iter(), N)
-                .enumerate()
-                .map(|(i, x)| {
-                    let mut elements = x;
-                    elements.reverse();
-
-                    if i > 0 {
-                        chunk_size *= UnrolledCell::<T, P, N, G>::GROWTH_RATE;
-                    }
-
-                    UnrolledList(P::new(UnrolledCell {
-                        index: elements.len(),
-                        elements: P::new(elements),
-                        next: None,
-                        size: chunk_size,
-                    }))
-                })
-                .collect();
-
-        let mut rev_iter = (0..pairs.len()).rev();
-        rev_iter.next();
-
-        for i in rev_iter {
-            let prev = pairs.pop().unwrap();
-
-            if let Some(UnrolledList(cell)) = pairs.get_mut(i) {
-                P::get_mut::<UnrolledCell<T, P, N, G>>(cell)
-                    .expect("Only one owner allowed in construction")
-                    .next = Some(prev);
-            } else {
-                unreachable!()
-            }
-        }
-
-        pairs.pop().unwrap_or_else(Self::new)
+        let reversed: Vec<_> = iter.into_iter().collect();
+        from_vec(reversed)
     }
 }
 
@@ -788,7 +813,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
 
             if let Some(UnrolledList(cell)) = nodes.get_mut(i) {
                 // Check if this node can fit entirely into the previous one
-                if cell.elements.len() + prev.0.elements.len() <= cell.size {
+                if cell.elements.len() + prev.0.elements.len() <= prev.0.size {
                     let left_inner = P::make_mut(cell);
                     let right_inner = P::make_mut(&mut prev.0);
 
@@ -840,7 +865,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> From<Vec<T>>
     for UnrolledList<T, P, N, G>
 {
     fn from(vec: Vec<T>) -> Self {
-        vec.into_iter().collect()
+        from_vec(vec)
     }
 }
 
@@ -848,7 +873,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> From<&[T]>
     for UnrolledList<T, P, N, G>
 {
     fn from(vec: &[T]) -> Self {
-        vec.iter().cloned().collect()
+        from_vec(vec.to_vec())
     }
 }
 
@@ -1213,7 +1238,7 @@ mod vlist_iterator_tests {
 
         list = list.append(
             vec![
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             ]
             .into_iter()
             .collect(),
@@ -1286,7 +1311,7 @@ mod vlist_iterator_tests {
 
     #[test]
     fn cdr_works_successfully() {
-        let list: RcList<usize> = vec![1, 2, 3, 4, 5].into_iter().collect();
+        let list: RcList<usize> = vec![1, 2, 3, 4, 5].into();
 
         let cdr = list.cdr().unwrap();
 
@@ -1300,7 +1325,7 @@ mod vlist_iterator_tests {
 
     #[test]
     fn cdr_mut() {
-        let mut list: RcList<usize> = vec![1, 2, 3usize].into_iter().collect();
+        let mut list: RcList<usize> = vec![1, 2, 3usize].into();
         assert!(list.cdr_mut().is_some());
         assert_eq!(list.len(), 2);
         assert!(list.cdr_mut().is_some());

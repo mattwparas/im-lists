@@ -1052,7 +1052,7 @@ mod arc_tests {
     use std::ops::Add;
 
     use super::*;
-    use crate::{shared_list, shared_vlist};
+    use crate::{shared_list, shared_vlist, vlist};
 
     #[test]
     fn strong_count() {
@@ -1378,5 +1378,30 @@ mod arc_tests {
                 shared_vlist![0, 1, 2, 3, 4]
             ]
         );
+    }
+
+    #[test]
+    fn vlist_growth() {
+        let list = vlist![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+
+        // let list = VList::cons(
+        //     6,
+        //     VList::cons(
+        //         5,
+        //         VList::cons(
+        //             4,
+        //             VList::cons(
+        //                 3,
+        //                 VList::cons(2, VList::cons(1, VList::cons(0, VList::new()))),
+        //             ),
+        //         ),
+        //     ),
+        // );
+
+        for node in list.0.node_iter() {
+            dbg!(node.elements());
+        }
+
+        dbg!(list);
     }
 }
