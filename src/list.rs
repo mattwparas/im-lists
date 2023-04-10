@@ -33,7 +33,7 @@ use crate::{
 /// each successive node will grow in size. With `N = 2`, and `G = 2`, the list will look something like this:
 ///
 /// ```text
-/// [0, 1] -> [2, 3, 4, 5] -> [6, 7, 8, 9, 10, 11, 12, 13] -> ...
+/// [0, 1, 2, 3, 4, 5, 6, 7, 8] -> [9, 10, 11, 12] -> [13, 14]
 ///
 /// ```
 ///
@@ -1384,24 +1384,7 @@ mod arc_tests {
     fn vlist_growth() {
         let list = vlist![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
-        // let list = VList::cons(
-        //     6,
-        //     VList::cons(
-        //         5,
-        //         VList::cons(
-        //             4,
-        //             VList::cons(
-        //                 3,
-        //                 VList::cons(2, VList::cons(1, VList::cons(0, VList::new()))),
-        //             ),
-        //         ),
-        //     ),
-        // );
-
-        for node in list.0.node_iter() {
-            dbg!(node.elements());
-        }
-
-        dbg!(list);
+        let counts: Vec<_> = list.0.node_iter().map(|x| x.elements().len()).collect();
+        assert_eq!(vec![6, 8, 4, 2], counts);
     }
 }
