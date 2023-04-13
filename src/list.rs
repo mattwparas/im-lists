@@ -33,7 +33,7 @@ use crate::{
 /// each successive node will grow in size. With `N = 2`, and `G = 2`, the list will look something like this:
 ///
 /// ```text
-/// [0, 1, 2, 3, 4, 5, 6, 7, 8] -> [9, 10, 11, 12] -> [13, 14]
+/// [0, 1, 2, 3, 4, 5, 6, 7] -> [8, 9, 10, 11] -> [12, 13]
 ///
 /// ```
 ///
