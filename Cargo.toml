@@ -6,7 +6,7 @@ edition = "2021"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mattwparas/im-lists"
-keywords = ["immutable", "unrolled-linked-list", "persistent", "list", "linked-list", "vlist"]
+keywords = ["immutable", "unrolled-linked-list", "persistent", "list", "vlist"]
 description = "Persistent unrolled linked lists and vlists"
 categories = ["data-structures"]
 
