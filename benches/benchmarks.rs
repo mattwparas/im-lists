@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use im_lists::list::{List, SharedList};
+use im_lists::list::{GenericList, List, SharedList};
 
 use im_rc::Vector;
 use std::collections::LinkedList;
@@ -23,6 +23,10 @@ pub fn iteration_bench(c: &mut Criterion) {
         size = 100000usize,
         (unrolled_rc_iteration, List<_>),
         (unrolled_arc_iteration, SharedList<_>),
+        (
+            vlist_rc_iteration,
+            im_lists::list::GenericList<_, im_lists::shared::RcPointer, 4, 2>
+        ),
         (immutable_vector_iteration, Vector<_>),
         (vec_iteration, Vec<_>),
         (linked_list_iteration, LinkedList<_>)
@@ -61,6 +65,10 @@ pub fn construction_bench(c: &mut Criterion) {
         size = 100000usize,
         (unrolled_rc_construction, List<_>),
         (unrolled_arc_construction, SharedList<_>),
+        (
+            vlist_rc_construction,
+            im_lists::list::GenericList<_, im_lists::shared::RcPointer, 4, 2>
+        ),
         (immutable_vector_construction, Vector<_>),
         (vec_construction, Vec<_>),
         (linked_list_construction, LinkedList<_>)
@@ -81,6 +89,16 @@ pub fn push_front_bench(c: &mut Criterion) {
     group.bench_function("push_front_list", |b| {
         b.iter(|| {
             let mut list = List::new();
+            for i in 0..10000 {
+                list.cons_mut(i);
+            }
+        })
+    });
+
+    group.bench_function("push_front_vlist", |b| {
+        b.iter(|| {
+            let mut list: im_lists::list::GenericList<_, im_lists::shared::RcPointer, 4, 2> =
+                GenericList::new();
             for i in 0..10000 {
                 list.cons_mut(i);
             }
