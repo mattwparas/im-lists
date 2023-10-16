@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.5.0] - 2023-3-29
+### Added
+- Added a drop handler type parameter, allowing overriding the drop handler implementation for deeply recursive usages.
+
 ## [0.4.0] - 2023-3-29
 ### Added
 - Added a growth factor to the generic list implementation, allowing for subsequent nodes to grow exponentially. This creates a VList implementation on top of the existing unrolled linked list implementation.
