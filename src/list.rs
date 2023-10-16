@@ -23,9 +23,9 @@ use crate::{
 /// This list is suitable for either a single threaded or multi threaded environment. The list accepts the smart pointer
 /// that you would like to use as a type parameter. There are sensible type aliases for implementations that you can use:
 ///
-/// [`SharedList`](crate::list::SharedList) is simply a type alias for `GenericList<T, ArcPointer, 256, 1>`, which is both [`Send`] + [`Sync`]
-/// Similarly, [`List`](crate::list::List) is just a type alias for `GenericList<T, RcPointer, 256, 1>`. [`SharedVList`](crate::list::SharedVList) and
-/// [`VList`](crate::list::VList) are type aliases, as well, using the same backing of `GenericList`, however they have a growth factor of 2 - meaning
+/// [`SharedList`] is simply a type alias for `GenericList<T, ArcPointer, 256, 1>`, which is both [`Send`] + [`Sync`]
+/// Similarly, [`List`] is just a type alias for `GenericList<T, RcPointer, 256, 1>`. [`SharedVList`] and
+/// [`VList`] are type aliases, as well, using the same backing of `GenericList`, however they have a growth factor of 2 - meaning
 /// bucket sizes will grow exponentially.
 ///
 /// It's implemented as an unrolled linked list, which is a single linked list which stores a variable
