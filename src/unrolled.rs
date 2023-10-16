@@ -19,6 +19,12 @@ type RefIter<'a, T, P, const N: usize, const G: usize> = FlatMap<
     fn(&'a UnrolledList<T, P, N, G>) -> Rev<std::slice::Iter<'a, T>>,
 >;
 
+type DrainingConsumingIter<T, P, const N: usize, const G: usize> = FlatMap<
+    DrainingNodeIter<T, P, N, G>,
+    Rev<std::iter::Take<std::vec::IntoIter<T>>>,
+    fn(UnrolledList<T, P, N, G>) -> Rev<std::iter::Take<std::vec::IntoIter<T>>>,
+>;
+
 #[derive(Eq)]
 pub(crate) struct UnrolledList<T: Clone, P: PointerFamily, const N: usize, const G: usize = 1>(
     P::Pointer<UnrolledCell<T, P, N, G>>,
@@ -74,6 +80,20 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     // Compare the nodes for pointer equality
     pub fn ptr_eq(&self, other: &Self) -> bool {
         P::ptr_eq(&self.0, &other.0)
+    }
+
+    pub fn draining_iterator(self) -> DrainingConsumingWrapper<T, P, N, G> {
+        DrainingConsumingWrapper(self.into_draining_node_iter().flat_map(|x| {
+            let index = x.index();
+
+            P::try_unwrap(x.0)
+                .map(|mut cell| {
+                    P::get_mut(&mut cell.elements)
+                        .map(|vec| std::mem::take(vec).into_iter().take(index).rev())
+                        .unwrap_or_else(|| Vec::new().into_iter().take(0).rev())
+                })
+                .unwrap_or_else(|| Vec::new().into_iter().take(0).rev())
+        }))
     }
 
     #[cfg(test)]
@@ -310,6 +330,13 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     #[cfg(test)]
     fn assert_list_invariants(&self) {
         assert!(self.does_node_satisfy_invariant())
+    }
+
+    pub(crate) fn into_draining_node_iter(self) -> DrainingNodeIter<T, P, N, G> {
+        DrainingNodeIter {
+            cur: Some(self),
+            _inner: PhantomData,
+        }
     }
 
     pub(crate) fn into_node_iter(self) -> NodeIter<T, P, N, G> {
@@ -556,6 +583,35 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Extend<T>
     }
 }
 
+pub(crate) struct DrainingNodeIter<T: Clone, P: PointerFamily, const N: usize, const G: usize> {
+    cur: Option<UnrolledList<T, P, N, G>>,
+    _inner: PhantomData<T>,
+}
+
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
+    for DrainingNodeIter<T, P, N, G>
+{
+    type Item = UnrolledList<T, P, N, G>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(_self) = std::mem::take(&mut self.cur) {
+            if let Some(next) = _self.0.next.as_ref() {
+                // If we can, drop these values!
+                if next.strong_count() == 1 && P::strong_count(&next.0.elements) == 1 {
+                    self.cur = _self.0.next.clone();
+                } else {
+                    self.cur = None
+                }
+            } else {
+                self.cur = None
+            }
+
+            Some(_self)
+        } else {
+            None
+        }
+    }
+}
+
 pub(crate) struct NodeIter<T: Clone, P: PointerFamily, const N: usize, const G: usize> {
     cur: Option<UnrolledList<T, P, N, G>>,
     _inner: PhantomData<T>,
@@ -564,10 +620,9 @@ pub(crate) struct NodeIter<T: Clone, P: PointerFamily, const N: usize, const G: 
 impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator for NodeIter<T, P, N, G> {
     type Item = UnrolledList<T, P, N, G>;
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(_self) = &self.cur {
-            let ret_val = self.cur.clone();
+        if let Some(_self) = std::mem::take(&mut self.cur) {
             self.cur = _self.0.next.clone();
-            ret_val
+            Some(_self)
         } else {
             None
         }
@@ -591,6 +646,38 @@ impl<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
         } else {
             None
         }
+    }
+}
+
+pub(crate) struct DrainingConsumingWrapper<
+    T: Clone,
+    P: PointerFamily,
+    const N: usize,
+    const G: usize,
+>(DrainingConsumingIter<T, P, N, G>);
+
+impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
+    for DrainingConsumingWrapper<T, P, N, G>
+{
+    type Item = T;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+
+    #[inline(always)]
+    fn fold<B, F>(self, init: B, f: F) -> B
+    where
+        Self: Sized,
+        F: FnMut(B, Self::Item) -> B,
+    {
+        self.0.fold(init, f)
     }
 }
 
@@ -1367,9 +1454,6 @@ mod vlist_iterator_tests {
     fn take() {
         let list: RcList<usize> = (0..2 * CAPACITY * 32).into_iter().collect();
         let next = list.take(100);
-
-        // println!("{:?}", next);
-        // println!("{:?}", next.elements());
 
         assert!(Iterator::eq(0..100usize, next.into_iter()))
     }

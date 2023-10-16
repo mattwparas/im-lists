@@ -101,6 +101,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
         self.0.ptr_eq(&other.0)
     }
 
+    #[doc(hidden)]
+    pub fn draining_iterator(mut self) -> impl Iterator<Item = T> {
+        std::mem::take(&mut self.0).draining_iterator()
+    }
+
     /// Get the length of the list
     ///
     /// # Examples
@@ -1468,5 +1473,24 @@ mod arc_tests {
 
         let counts: Vec<_> = list.0.node_iter().map(|x| x.elements().len()).collect();
         assert_eq!(vec![6, 8, 4, 2], counts);
+    }
+
+    #[test]
+    fn consuming_iter_with_no_references() {
+        let list = vlist![0, 1, 2, 3, 4, 5, 6, 7, 8];
+
+        let result = list.draining_iterator().collect::<Vec<_>>();
+
+        assert_eq!(vec![0, 1, 2, 3, 4, 5, 6, 7, 8], result);
+    }
+
+    #[test]
+    fn consuming_iter() {
+        let list = vlist![0, 1, 2, 3, 4, 5, 6, 7, 8];
+        let _second_list = list.cdr();
+
+        let result = list.draining_iterator().collect::<Vec<_>>();
+
+        assert_eq!(Vec::<usize>::new(), result);
     }
 }
