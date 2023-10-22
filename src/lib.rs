@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+pub mod handler;
 pub mod list;
 pub mod shared;
 pub(crate) mod unrolled;
