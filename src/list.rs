@@ -102,6 +102,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 
     #[doc(hidden)]
+    pub fn as_ptr_usize(&self) -> usize {
+        self.0.as_ptr_usize()
+    }
+
+    #[doc(hidden)]
     pub fn draining_iterator(mut self) -> impl Iterator<Item = T> {
         std::mem::take(&mut self.0).draining_iterator()
     }

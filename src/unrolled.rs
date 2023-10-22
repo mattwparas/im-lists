@@ -82,6 +82,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         P::ptr_eq(&self.0, &other.0)
     }
 
+    #[doc(hidden)]
+    pub fn as_ptr_usize(&self) -> usize {
+        P::as_ptr(&self.0) as usize
+    }
+
     pub fn draining_iterator(self) -> DrainingConsumingWrapper<T, P, N, G> {
         DrainingConsumingWrapper(self.into_draining_node_iter().flat_map(|x| {
             let index = x.index();

@@ -10,6 +10,7 @@ pub trait PointerFamily {
     fn ptr_eq<T>(this: &Self::Pointer<T>, other: &Self::Pointer<T>) -> bool;
     fn make_mut<T: Clone>(ptr: &mut Self::Pointer<T>) -> &mut T;
     fn clone<T>(ptr: &Self::Pointer<T>) -> Self::Pointer<T>;
+    fn as_ptr<T>(this: &Self::Pointer<T>) -> *const T;
 }
 
 pub struct RcPointer;
@@ -44,6 +45,10 @@ impl PointerFamily for RcPointer {
     fn clone<T>(ptr: &Self::Pointer<T>) -> Self::Pointer<T> {
         Rc::clone(ptr)
     }
+
+    fn as_ptr<T>(this: &Self::Pointer<T>) -> *const T {
+        Rc::as_ptr(this)
+    }
 }
 
 pub struct ArcPointer;
@@ -77,5 +82,9 @@ impl PointerFamily for ArcPointer {
 
     fn clone<T>(ptr: &Self::Pointer<T>) -> Self::Pointer<T> {
         Arc::clone(ptr)
+    }
+
+    fn as_ptr<T>(this: &Self::Pointer<T>) -> *const T {
+        Arc::as_ptr(this)
     }
 }
