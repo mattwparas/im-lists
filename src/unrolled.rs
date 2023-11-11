@@ -82,9 +82,16 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         P::ptr_eq(&self.0, &other.0)
     }
 
-    #[doc(hidden)]
+    pub fn shared_ptr_eq(&self, other: &Self) -> bool {
+        P::ptr_eq(&self.0.elements, &other.0.elements) && self.0.index == other.0.index
+    }
+
     pub fn as_ptr_usize(&self) -> usize {
         P::as_ptr(&self.0) as usize
+    }
+
+    pub fn elements_as_ptr_usize(&self) -> usize {
+        P::as_ptr(&self.0.elements) as usize
     }
 
     pub fn draining_iterator(self) -> DrainingConsumingWrapper<T, P, N, G> {
@@ -444,7 +451,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         self.0.elements.is_empty()
     }
 
-    fn index(&self) -> usize {
+    pub fn index(&self) -> usize {
         self.0.index
     }
 }
@@ -603,6 +610,10 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
                 // If we can, drop these values!
                 if next.strong_count() == 1 && P::strong_count(&next.0.elements) == 1 {
                     self.cur = _self.0.next.clone();
+
+                    // self.cur = std::mem::take(&mut _self.0.next);
+
+                    // std::mem::swap(&mut self.cur, &mut _self.0.next);
                 } else {
                     self.cur = None
                 }

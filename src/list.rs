@@ -102,8 +102,24 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 
     #[doc(hidden)]
+    pub fn storage_ptr_eq(&self, other: &Self) -> bool {
+        self.0.shared_ptr_eq(&other.0)
+    }
+
+    #[doc(hidden)]
     pub fn as_ptr_usize(&self) -> usize {
         self.0.as_ptr_usize()
+    }
+
+    #[doc(hidden)]
+    pub fn elements_as_ptr_usize(&self) -> usize {
+        // Overflow is fine - this should give us a unique value?
+        self.0.elements_as_ptr_usize() + self.0.index()
+    }
+
+    #[doc(hidden)]
+    pub fn identity_tuple(&self) -> (usize, usize) {
+        (self.0.elements_as_ptr_usize(), self.0.index())
     }
 
     #[doc(hidden)]
@@ -819,6 +835,16 @@ mod tests {
 
         let left_clone: List<usize> = left.clone();
         assert!(left.ptr_eq(&left_clone))
+    }
+
+    #[test]
+    fn cdr_ptr_eq() {
+        let left: List<usize> = list![1, 2, 3, 4, 5];
+
+        let new_right = left.cdr().unwrap();
+        let new_right2 = left.cdr().unwrap();
+
+        assert!(new_right.identity_tuple() == new_right2.identity_tuple());
     }
 
     #[test]
