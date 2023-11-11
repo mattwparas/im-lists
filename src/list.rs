@@ -838,6 +838,16 @@ mod tests {
     }
 
     #[test]
+    fn cdr_ptr_eq() {
+        let left: List<usize> = list![1, 2, 3, 4, 5];
+
+        let new_right = left.cdr().unwrap();
+        let new_right2 = left.cdr().unwrap();
+
+        assert!(new_right.identity_tuple() == new_right2.identity_tuple());
+    }
+
+    #[test]
     fn len() {
         let list = list![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
         assert_eq!(list.len(), 10);
