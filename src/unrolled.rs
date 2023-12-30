@@ -251,8 +251,6 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     pub fn cons_mut(&mut self, value: T) {
         let index = self.0.index;
         if self.0.index < self.elements().len() {
-            // println!("Inside cons_mut here!");
-            // reference.truncate(self.index);
             P::make_mut(&mut P::make_mut(&mut self.0).elements).truncate(index);
         }
 
@@ -302,6 +300,10 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         }
 
         ret
+    }
+
+    pub(crate) fn cdr_exists(&self) -> bool {
+        self.0.index > 1 || self.0.next.is_some()
     }
 
     // Returns the cdr of the list
@@ -1034,6 +1036,14 @@ mod iterator_tests {
     const CAPACITY: usize = 256;
 
     type RcList<T> = UnrolledList<T, RcPointer, 256>;
+
+    #[test]
+    fn check_size() {
+        println!(
+            "{}",
+            std::mem::size_of::<UnrolledCell<usize, RcPointer, 256, 256>>()
+        );
+    }
 
     #[test]
     fn basic_construction() {

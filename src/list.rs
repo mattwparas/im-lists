@@ -269,6 +269,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
         }
     }
 
+    #[doc(hidden)]
+    pub fn cdr_exists(&self) -> bool {
+        self.0.cdr_exists()
+    }
+
     /// Gets the rest of the list, mutably.
     /// Alias for [`cdr_mut`](crate::list::List::cdr_mut)
     pub fn rest_mut(&mut self) -> Option<&mut Self> {
