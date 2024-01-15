@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod proptests;
 
+use smallvec::SmallVec;
+
 use crate::shared::PointerFamily;
 
 use std::cmp::Ordering;
@@ -834,7 +836,8 @@ where
             self.size
         };
 
-        let mut chunk = Vec::with_capacity(chunk_size);
+        // let mut chunk = Vec::with_capacity(chunk_size);
+        let mut chunk = Vec::new();
         for item in self.iter.by_ref().take(chunk_size) {
             chunk.push(item);
         }
@@ -858,7 +861,7 @@ fn from_vec<T: Clone, P: PointerFamily, const N: usize, const G: usize>(
 ) -> UnrolledList<T, P, N, G> {
     let length = vec.len();
 
-    let mut pairs: Vec<UnrolledList<_, _, N, G>> =
+    let mut pairs: SmallVec<[UnrolledList<_, _, N, G>; 16]> =
         ExponentialChunks::<_, N, G>::new(vec.into_iter(), length, N)
             .map(|(size, x)| {
                 let mut elements = x;
@@ -907,7 +910,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
 {
     fn from_iter<I: IntoIterator<Item = UnrolledList<T, P, N, G>>>(iter: I) -> Self {
         // Links up the nodes
-        let mut nodes: Vec<_> = iter.into_iter().collect();
+        let mut nodes: SmallVec<[_; 16]> = iter.into_iter().collect();
 
         let mut rev_iter = (0..nodes.len()).rev();
         rev_iter.next();
