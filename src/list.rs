@@ -1059,6 +1059,22 @@ mod tests {
     }
 
     #[test]
+    fn take_after_cdr() {
+        let list = list![0, 1, 2, 3, 4, 5];
+        let rest = list.rest().unwrap();
+
+        assert_eq!(rest.take(3), list![1, 2, 3]);
+    }
+
+    #[test]
+    fn tail_after_cdr() {
+        let list = list![0, 1, 2, 3, 4, 5];
+        let rest = list.rest().unwrap();
+
+        assert_eq!(rest.tail(2).unwrap(), list![3, 4, 5]);
+    }
+
+    #[test]
     fn indexing() {
         let list = vlist![0, 1, 2, 3, 4, 5];
 

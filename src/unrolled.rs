@@ -294,7 +294,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
                 inner.index -= len;
                 return Some(node);
             } else {
-                len -= node.0.elements.len();
+                len -= node.0.index;
             }
         }
 
@@ -302,7 +302,6 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
             return Some(Self::new());
         }
 
-        // Self::new()
         None
     }
 
