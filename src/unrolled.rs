@@ -257,7 +257,9 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
                 nodes.push(node);
                 break;
             } else {
-                count -= node.0.elements.len();
+                // Note: We might want to truncate the remaining
+                // elements of the vector.
+                count -= node.0.index;
                 nodes.push(node);
             }
         }
