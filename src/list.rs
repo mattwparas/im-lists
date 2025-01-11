@@ -131,7 +131,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     pub fn nodes(&self) -> Vec<Self> {
         self.0
             .node_iter()
-            .map(|x| Self(x.clone(), PhantomData))
+            .map(|x| {
+                let mut x = x.clone();
+                P::make_mut(&mut x.0).next = None;
+                Self(x, PhantomData)
+            })
             .collect()
     }
 
