@@ -127,6 +127,14 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
         std::mem::take(&mut self.0).draining_iterator()
     }
 
+    #[doc(hidden)]
+    pub fn nodes(&self) -> Vec<Self> {
+        self.0
+            .node_iter()
+            .map(|x| Self(x.clone(), PhantomData))
+            .collect()
+    }
+
     /// Get the length of the list
     ///
     /// # Examples
@@ -152,10 +160,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     /// assert_eq!(list, list![5, 4, 3, 2, 1])
     /// ```
     pub fn reverse(mut self) -> Self {
-        // self.0 = self.0.reverse();
-
         self.0 = std::mem::take(&mut self.0).reverse();
-
         self
     }
 
