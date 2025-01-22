@@ -88,7 +88,7 @@ type DrainingConsumingIter<T, P, const N: usize, const G: usize> = FlatMap<
 
 #[derive(Eq)]
 pub(crate) struct UnrolledList<T: Clone, P: PointerFamily, const N: usize, const G: usize = 1>(
-    P::Pointer<UnrolledCell<T, P, N, G>>,
+    pub(crate) P::Pointer<UnrolledCell<T, P, N, G>>,
 );
 
 impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Clone
@@ -543,7 +543,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Drop for Unroll
 pub(crate) struct UnrolledCell<T: Clone, P: PointerFamily, const N: usize, const G: usize> {
     index: usize,
     elements: P::Pointer<Vec<T>>,
-    next: Option<UnrolledList<T, P, N, G>>,
+    pub(crate) next: Option<UnrolledList<T, P, N, G>>,
     size: usize,
 }
 

@@ -127,6 +127,18 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
         std::mem::take(&mut self.0).draining_iterator()
     }
 
+    #[doc(hidden)]
+    pub fn nodes(&self) -> Vec<Self> {
+        self.0
+            .node_iter()
+            .map(|x| {
+                let mut x = x.clone();
+                P::make_mut(&mut x.0).next = None;
+                Self(x, PhantomData)
+            })
+            .collect()
+    }
+
     /// Get the length of the list
     ///
     /// # Examples
@@ -152,10 +164,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     /// assert_eq!(list, list![5, 4, 3, 2, 1])
     /// ```
     pub fn reverse(mut self) -> Self {
-        // self.0 = self.0.reverse();
-
         self.0 = std::mem::take(&mut self.0).reverse();
-
         self
     }
 
@@ -747,13 +756,12 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
 }
 
 impl<
-        'a,
         T: Clone,
         P: PointerFamily,
         const N: usize,
         const G: usize,
         D: DropHandler<GenericList<T, P, N, G, D>>,
-    > std::ops::Add for &'a GenericList<T, P, N, G, D>
+    > std::ops::Add for &GenericList<T, P, N, G, D>
 {
     type Output = GenericList<T, P, N, G, D>;
 
