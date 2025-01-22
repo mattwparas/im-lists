@@ -756,13 +756,12 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
 }
 
 impl<
-        'a,
         T: Clone,
         P: PointerFamily,
         const N: usize,
         const G: usize,
         D: DropHandler<GenericList<T, P, N, G, D>>,
-    > std::ops::Add for &'a GenericList<T, P, N, G, D>
+    > std::ops::Add for &GenericList<T, P, N, G, D>
 {
     type Output = GenericList<T, P, N, G, D>;
 
