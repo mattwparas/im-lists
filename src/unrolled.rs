@@ -452,14 +452,15 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
             self.0.elements.get(self.0.index - index - 1)
         } else {
             let mut cur = self.0.next.as_ref();
-            index -= self.0.elements.len();
+            index -= self.0.index;
+
             while let Some(node) = cur {
                 if index < node.0.index {
                     let node_cap = node.0.index;
                     return node.0.elements.get(node_cap - index - 1);
                 } else {
                     cur = node.0.next.as_ref();
-                    index -= node.0.elements.len();
+                    index -= node.0.index;
                 }
             }
 
