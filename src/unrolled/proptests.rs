@@ -11,10 +11,15 @@ enum Action {
     Reverse,
     PushBack(usize),
     PopFront,
+    Get(usize),
 }
 
 impl Action {
-    fn act_on_vector(self, mut vec: Vec<usize>) -> Vec<usize> {
+    fn act_on_vector(
+        self,
+        mut vec: Vec<usize>,
+        fetch_values: &mut Vec<Option<usize>>,
+    ) -> Vec<usize> {
         match self {
             Action::Cons(value) => {
                 vec.insert(0, value);
@@ -48,14 +53,22 @@ impl Action {
                     vec
                 }
             }
+            Action::Get(i) => {
+                fetch_values.push(vec.get(i).cloned());
+                vec
+            }
         }
     }
 }
 
-fn crunch_actions_for_vec(initial: Vec<usize>, actions: Vec<Action>) -> Vec<usize> {
-    actions
-        .into_iter()
-        .fold(initial, |vec, action| action.act_on_vector(vec))
+fn crunch_actions_for_vec(
+    initial: Vec<usize>,
+    actions: Vec<Action>,
+    fetch_values: &mut Vec<Option<usize>>,
+) -> Vec<usize> {
+    actions.into_iter().fold(initial, |vec, action| {
+        action.act_on_vector(vec, fetch_values)
+    })
 }
 
 fn action_strategy() -> impl Strategy<Value = Action> {
@@ -66,7 +79,9 @@ fn action_strategy() -> impl Strategy<Value = Action> {
             .prop_map(|x| Action::Append(x.into_iter().collect())),
         Just(Action::Reverse),
         any::<usize>().prop_map(Action::PushBack),
-        Just(Action::PopFront)
+        Just(Action::PopFront),
+        // Getting values should work...
+        (0..100usize).prop_map(Action::Get)
     ]
 }
 
@@ -100,7 +115,7 @@ fn list_strategy_from_iterator() -> impl Strategy<Value = List<isize>> {
 }
 
 
-fn act_on_list(action: Action, mut list: List<usize>) -> List<usize> {
+fn act_on_list(action: Action, mut list: List<usize>, fetch_values: &mut Vec<Option<usize>>) -> List<usize> {
     // println!("Action: {:?}, List: {:?}", self, list);
     match action {
         Action::Cons(value) => {
@@ -121,14 +136,18 @@ fn act_on_list(action: Action, mut list: List<usize>) -> List<usize> {
             list.pop_front();
             list
         }
+        Action::Get(value) => {
+            fetch_values.push(list.get(value).cloned());
+            list
+        }
     }
 }
 
 
 
-fn crunch_actions_for_list(initial: List<usize>, actions: Vec<Action>) -> List<usize> {
+fn crunch_actions_for_list(initial: List<usize>, actions: Vec<Action>, fetch_values: &mut Vec<Option<usize>>) -> List<usize> {
     actions.into_iter().fold(initial, |list, action| {
-        let res = act_on_list(action, list);
+        let res = act_on_list(action, list, fetch_values);
         res
     })
 }
@@ -267,10 +286,15 @@ proptest! {
 fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {
     let initial_list: List<usize> = vec.clone().into_iter().collect();
 
-    let resulting_list = crunch_actions_for_list(initial_list, actions.clone());
-    let resulting_vector = crunch_actions_for_vec(vec, actions);
+    let mut fetch_values_list = Vec::new();
+    let mut fetch_values_vec = Vec::new();
+
+    let resulting_list = crunch_actions_for_list(initial_list, actions.clone(), &mut fetch_values_list);
+    let resulting_vector = crunch_actions_for_vec(vec, actions, &mut fetch_values_vec);
 
     resulting_list.assert_invariants();
+
+    assert_eq!(fetch_values_list, fetch_values_vec);
 
     assert!(Iterator::eq(resulting_list.iter(), resulting_vector.iter()));
 }
