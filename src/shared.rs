@@ -88,3 +88,41 @@ impl PointerFamily for ArcPointer {
         Arc::as_ptr(this)
     }
 }
+
+pub struct TriomphePointer;
+
+impl PointerFamily for TriomphePointer {
+    type Pointer<T> = triomphe::Arc<T>;
+
+    fn new<T>(value: T) -> Self::Pointer<T> {
+        triomphe::Arc::new(value)
+    }
+
+    fn strong_count<T>(this: &Self::Pointer<T>) -> usize {
+        triomphe::Arc::strong_count(this)
+    }
+
+    fn try_unwrap<T>(this: Self::Pointer<T>) -> Option<T> {
+        triomphe::Arc::try_unwrap(this).ok()
+    }
+
+    fn get_mut<T>(this: &mut Self::Pointer<T>) -> Option<&mut T> {
+        triomphe::Arc::get_mut(this)
+    }
+
+    fn ptr_eq<T>(this: &Self::Pointer<T>, other: &Self::Pointer<T>) -> bool {
+        triomphe::Arc::ptr_eq(this, other)
+    }
+
+    fn make_mut<T: Clone>(ptr: &mut Self::Pointer<T>) -> &mut T {
+        triomphe::Arc::make_mut(ptr)
+    }
+
+    fn clone<T>(ptr: &Self::Pointer<T>) -> Self::Pointer<T> {
+        triomphe::Arc::clone(ptr)
+    }
+
+    fn as_ptr<T>(this: &Self::Pointer<T>) -> *const T {
+        triomphe::Arc::as_ptr(this)
+    }
+}

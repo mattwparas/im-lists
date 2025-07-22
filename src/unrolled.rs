@@ -155,6 +155,14 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         P::as_ptr(&self.0.elements) as usize
     }
 
+    pub fn next_ptr_as_usize(&self) -> Option<usize> {
+        self.0.next.as_ref().map(|x| x.as_ptr_usize())
+    }
+
+    pub fn current_node_iter(&self) -> impl Iterator<Item = &T> {
+        self.0.elements.iter().take(self.index()).rev()
+    }
+
     pub fn draining_iterator(self) -> DrainingConsumingWrapper<T, P, N, G> {
         DrainingConsumingWrapper(self.into_draining_node_iter().flat_map(|x| {
             let index = x.index();
@@ -313,6 +321,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     pub fn cons_mut(&mut self, value: T) {
         let index = self.0.index;
         if self.0.index < self.elements().len() {
+            // println!("CONS MUTING THE INNER THING");
             P::make_mut(&mut P::make_mut(&mut self.0).elements).truncate(index);
         }
 
@@ -334,6 +343,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 
             std::mem::swap(self, &mut default);
         } else {
+            // println!("CONS MUTING THE INNER THING ELSE BRANCH");
             let inner = P::make_mut(&mut self.0);
             inner.cons_mut(value);
         }
@@ -517,7 +527,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.elements.is_empty()
+        self.0.elements.is_empty() || self.0.index == 0
+        // self.0.elements.is_empty()
     }
 
     pub fn index(&self) -> usize {
