@@ -321,7 +321,6 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     pub fn cons_mut(&mut self, value: T) {
         let index = self.0.index;
         if self.0.index < self.elements().len() {
-            // println!("CONS MUTING THE INNER THING");
             P::make_mut(&mut P::make_mut(&mut self.0).elements).truncate(index);
         }
 
@@ -343,7 +342,6 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 
             std::mem::swap(self, &mut default);
         } else {
-            // println!("CONS MUTING THE INNER THING ELSE BRANCH");
             let inner = P::make_mut(&mut self.0);
             inner.cons_mut(value);
         }
@@ -528,7 +526,6 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 
     pub fn is_empty(&self) -> bool {
         self.0.elements.is_empty() || self.0.index == 0
-        // self.0.elements.is_empty()
     }
 
     pub fn index(&self) -> usize {
@@ -1346,9 +1343,6 @@ mod iterator_tests {
         let list: RcList<usize> = (0..2 * CAPACITY).into_iter().collect();
         let next = list.take(100);
 
-        println!("{:?}", next);
-        println!("{:?}", next.elements());
-
         assert!(Iterator::eq(0..100usize, next.into_iter()))
     }
 
@@ -1364,7 +1358,6 @@ mod iterator_tests {
         let list: RcList<usize> = (0..2 * CAPACITY).into_iter().collect();
         let next = list.tail(CAPACITY + 100).unwrap();
 
-        println!("next: {:?}", next);
         assert!(Iterator::eq(
             CAPACITY + 100usize..2 * CAPACITY,
             next.into_iter()
@@ -1620,8 +1613,6 @@ mod vlist_iterator_tests {
         let list: RcList<usize> = (0..2 * CAPACITY * 32).into_iter().collect();
         let next = list.tail(CAPACITY + 100).unwrap();
 
-        // println!("next: {:?}", next);
-        // println!("original: {:?}", list);
         assert!(Iterator::eq(
             CAPACITY + 100usize..2 * CAPACITY * 32,
             next.into_iter()
