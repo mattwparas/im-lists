@@ -14,7 +14,6 @@ categories = ["data-structures"]
 
 [dependencies]
 smallvec = { version = "1.10.0" }
-triomphe = "0.1.14"
 
 [dev-dependencies]
 criterion = "0.3.5"
