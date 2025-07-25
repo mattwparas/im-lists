@@ -122,6 +122,18 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
         (self.0.elements_as_ptr_usize(), self.0.index())
     }
 
+    // Check the next pointer. If the next pointer is the same,
+    // then we otherwise need to check the values of the current node of the list.
+    #[doc(hidden)]
+    pub fn next_ptr_as_usize(&self) -> Option<usize> {
+        self.0.next_ptr_as_usize()
+    }
+
+    #[doc(hidden)]
+    pub fn current_node_iter(&self) -> impl Iterator<Item = &T> {
+        self.0.current_node_iter()
+    }
+
     #[doc(hidden)]
     pub fn draining_iterator(mut self) -> impl Iterator<Item = T> {
         std::mem::take(&mut self.0).draining_iterator()
@@ -1552,5 +1564,22 @@ mod arc_tests {
         let result = list.draining_iterator().collect::<Vec<_>>();
 
         assert_eq!(Vec::<usize>::new(), result);
+    }
+
+    #[test]
+    fn list_empty_test() {
+        let mut list = (0..10000usize).into_iter().collect::<SharedVList<_>>();
+
+        for _ in 0..10000 {
+            list.cdr_mut();
+
+            if list.len() == 0 {
+                assert!(list.is_empty())
+            } else {
+                assert!(!list.is_empty())
+            }
+        }
+
+        // assert!(list.is_empty())
     }
 }

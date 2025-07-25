@@ -155,6 +155,14 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         P::as_ptr(&self.0.elements) as usize
     }
 
+    pub fn next_ptr_as_usize(&self) -> Option<usize> {
+        self.0.next.as_ref().map(|x| x.as_ptr_usize())
+    }
+
+    pub fn current_node_iter(&self) -> impl Iterator<Item = &T> {
+        self.0.elements.iter().take(self.index()).rev()
+    }
+
     pub fn draining_iterator(self) -> DrainingConsumingWrapper<T, P, N, G> {
         DrainingConsumingWrapper(self.into_draining_node_iter().flat_map(|x| {
             let index = x.index();
@@ -517,7 +525,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.elements.is_empty()
+        self.0.elements.is_empty() || self.0.index == 0
     }
 
     pub fn index(&self) -> usize {
@@ -1335,9 +1343,6 @@ mod iterator_tests {
         let list: RcList<usize> = (0..2 * CAPACITY).into_iter().collect();
         let next = list.take(100);
 
-        println!("{:?}", next);
-        println!("{:?}", next.elements());
-
         assert!(Iterator::eq(0..100usize, next.into_iter()))
     }
 
@@ -1353,7 +1358,6 @@ mod iterator_tests {
         let list: RcList<usize> = (0..2 * CAPACITY).into_iter().collect();
         let next = list.tail(CAPACITY + 100).unwrap();
 
-        println!("next: {:?}", next);
         assert!(Iterator::eq(
             CAPACITY + 100usize..2 * CAPACITY,
             next.into_iter()
@@ -1609,8 +1613,6 @@ mod vlist_iterator_tests {
         let list: RcList<usize> = (0..2 * CAPACITY * 32).into_iter().collect();
         let next = list.tail(CAPACITY + 100).unwrap();
 
-        // println!("next: {:?}", next);
-        // println!("original: {:?}", list);
         assert!(Iterator::eq(
             CAPACITY + 100usize..2 * CAPACITY * 32,
             next.into_iter()
