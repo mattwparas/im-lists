@@ -5,5 +5,6 @@ pub trait DropHandler<T> {
 pub struct DefaultDropHandler;
 
 impl<T> DropHandler<T> for DefaultDropHandler {
+    #[inline(always)]
     fn drop_handler(_obj: &mut T) {}
 }
