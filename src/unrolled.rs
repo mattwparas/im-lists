@@ -321,6 +321,10 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     pub fn cons_mut(&mut self, value: T) {
         let index = self.0.index;
 
+        // This is saying: If we are pointing to a cell where the offset
+        // has been moved to the right but the underlying data has not
+        // yet been truncated, we should attempt to eagerly do so, otherwise
+        // we should fall back to the existing implementation.
         if self.0.index < self.elements().len() {
             P::make_mut(&mut P::make_mut(&mut self.0).elements).truncate(index);
         }
@@ -343,11 +347,6 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 
             std::mem::swap(self, &mut default);
         } else {
-            // TODO: We shouldn't necessarily eagerly copy everything. We probably should
-            // just allocate a new node and point to this one, since this is probably going to be full
-            // at some point. The cons mut is nasty since we're morally copying a HUGE vector
-            // needlessly.
-
             match P::get_mut(&mut self.0) {
                 Some(inner) => {
                     match P::get_mut(&mut inner.elements) {

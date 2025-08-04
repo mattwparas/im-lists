@@ -12,6 +12,7 @@ enum Action {
     PushBack(usize),
     PopFront,
     Get(usize),
+    Clone,
 }
 
 impl Action {
@@ -57,6 +58,7 @@ impl Action {
                 fetch_values.push(vec.get(i).cloned());
                 vec
             }
+            Action::Clone => vec,
         }
     }
 }
@@ -115,7 +117,7 @@ fn list_strategy_from_iterator() -> impl Strategy<Value = List<isize>> {
 }
 
 
-fn act_on_list(action: Action, mut list: List<usize>, fetch_values: &mut Vec<Option<usize>>) -> List<usize> {
+fn act_on_list(context: &mut ListContext, action: Action, mut list: List<usize>, fetch_values: &mut Vec<Option<usize>>) -> List<usize> {
     // println!("Action: {:?}, List: {:?}", self, list);
     match action {
         Action::Cons(value) => {
@@ -140,14 +142,20 @@ fn act_on_list(action: Action, mut list: List<usize>, fetch_values: &mut Vec<Opt
             fetch_values.push(list.get(value).cloned());
             list
         }
+        Action::Clone => {
+            context.lists.push(list.clone());
+            list
+        }
     }
 }
 
+struct ListContext{
+    lists: Vec<List<usize>>
+}
 
-
-fn crunch_actions_for_list(initial: List<usize>, actions: Vec<Action>, fetch_values: &mut Vec<Option<usize>>) -> List<usize> {
+fn crunch_actions_for_list(context: &mut ListContext, initial: List<usize>, actions: Vec<Action>, fetch_values: &mut Vec<Option<usize>>) -> List<usize> {
     actions.into_iter().fold(initial, |list, action| {
-        let res = act_on_list(action, list, fetch_values);
+        let res = act_on_list(context, action, list, fetch_values);
         res
     })
 }
@@ -289,7 +297,9 @@ fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {
     let mut fetch_values_list = Vec::new();
     let mut fetch_values_vec = Vec::new();
 
-    let resulting_list = crunch_actions_for_list(initial_list, actions.clone(), &mut fetch_values_list);
+    let mut context = ListContext { lists: Vec::new() };
+
+    let resulting_list = crunch_actions_for_list(&mut context, initial_list, actions.clone(), &mut fetch_values_list);
     let resulting_vector = crunch_actions_for_vec(vec, actions, &mut fetch_values_vec);
 
     resulting_list.assert_invariants();
