@@ -134,6 +134,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
         self.0.current_node_iter()
     }
 
+    #[doc(hidden)]
     pub fn node_count(&self) -> usize {
         self.0.cell_count()
     }
