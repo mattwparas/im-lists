@@ -177,8 +177,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         }))
     }
 
-    #[cfg(test)]
-    fn cell_count(&self) -> usize {
+    // #[cfg(test)]
+    pub fn cell_count(&self) -> usize {
         self.node_iter().count()
     }
 
@@ -320,6 +320,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 
     pub fn cons_mut(&mut self, value: T) {
         let index = self.0.index;
+
+        // This is saying: If we are pointing to a cell where the offset
+        // has been moved to the right but the underlying data has not
+        // yet been truncated, we should attempt to eagerly do so, otherwise
+        // we should fall back to the existing implementation.
         if self.0.index < self.elements().len() {
             P::make_mut(&mut P::make_mut(&mut self.0).elements).truncate(index);
         }
@@ -338,6 +343,40 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
                 elements: P::new(vec),
                 next: Some(self.clone()),
                 size: self.size() * UnrolledCell::<T, P, N, G>::GROWTH_RATE,
+            }));
+
+            std::mem::swap(self, &mut default);
+        } else {
+            match P::get_mut(&mut self.0) {
+                Some(inner) => {
+                    match P::get_mut(&mut inner.elements) {
+                        Some(reference) => {
+                            reference.push(value);
+                            inner.index += 1;
+                        }
+                        // Just check if its bigger than half, point to it.
+                        None => {
+                            self.slow_path_new_node(value);
+                        }
+                    }
+                }
+                None => {
+                    self.slow_path_new_node(value);
+                }
+            }
+        }
+    }
+
+    fn slow_path_new_node(&mut self, value: T) {
+        if self.elements().len() > self.size() / 2 {
+            let mut vec = Vec::with_capacity(N);
+            vec.push(value);
+
+            let mut default = UnrolledList(P::new(UnrolledCell {
+                index: 1,
+                elements: P::new(vec),
+                next: Some(self.clone()),
+                size: N,
             }));
 
             std::mem::swap(self, &mut default);
@@ -628,21 +667,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
     // TODO make this better
     fn cons_mut(&mut self, value: T) {
         let reference = P::make_mut(&mut self.elements);
-
-        // if reference.capacity() > self.size {
-        //     reference.reserve_exact(reference.capacity() - self.size);
-        // }
-
-        // If the cursor isn't pointing to the end, wipe out elements that aren't useful to us
-        // anymore since we've copied the underlying vector
-        // TODO this is in the above level
-        // if self.index < reference.len() {
-        //     println!("Inside cons_mut here!");
-        //     reference.truncate(self.index);
-        // }
-
         reference.push(value);
-
         self.index += 1;
     }
 
@@ -687,11 +712,12 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
 {
     type Item = UnrolledList<T, P, N, G>;
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(_self) = std::mem::take(&mut self.cur) {
+        if let Some(mut _self) = std::mem::take(&mut self.cur) {
             if let Some(next) = _self.0.next.as_ref() {
                 // If we can, drop these values!
                 if next.strong_count() == 1 && P::strong_count(&next.0.elements) == 1 {
-                    self.cur = _self.0.next.clone();
+                    // self.cur = _self.0.next.clone();
+                    self.cur = P::get_mut(&mut _self.0).and_then(|x| x.next.take());
                 } else {
                     self.cur = None
                 }

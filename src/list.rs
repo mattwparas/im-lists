@@ -135,6 +135,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 
     #[doc(hidden)]
+    pub fn node_count(&self) -> usize {
+        self.0.cell_count()
+    }
+
+    #[doc(hidden)]
     pub fn draining_iterator(mut self) -> impl Iterator<Item = T> {
         std::mem::take(&mut self.0).draining_iterator()
     }
