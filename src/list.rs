@@ -171,6 +171,9 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
         RawCell(self.0.as_ptr(), PhantomData)
     }
 
+    /// Call a function on a raw pointer
+    /// # Safety
+    /// This must be called with a valid pointer as returned from as_ptr
     #[doc(hidden)]
     pub unsafe fn call_from_raw<O, F: FnOnce(&Self) -> O>(
         cell: RawCell<T, P, N, G, D>,
@@ -182,8 +185,10 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
         res
     }
 
+    /// # Safety
+    /// This must be called with a valid pointer as returned from as_ptr
     #[doc(hidden)]
-    pub unsafe fn from_raw(cell: RawCell<T, P, N, G, D>) -> Self {
+    unsafe fn from_raw(cell: RawCell<T, P, N, G, D>) -> Self {
         Self(UnrolledList(P::from_raw(cell.0)), PhantomData)
     }
 
