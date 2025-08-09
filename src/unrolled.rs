@@ -129,6 +129,10 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         UnrolledList(P::new(UnrolledCell::new()))
     }
 
+    pub fn as_ptr(&self) -> *const UnrolledCell<T, P, N, G> {
+        P::as_ptr(&self.0)
+    }
+
     pub fn new_with_capacity() -> Self {
         UnrolledList(P::new(UnrolledCell::new_with_capacity()))
     }

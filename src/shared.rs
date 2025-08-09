@@ -11,6 +11,7 @@ pub trait PointerFamily {
     fn make_mut<T: Clone>(ptr: &mut Self::Pointer<T>) -> &mut T;
     fn clone<T>(ptr: &Self::Pointer<T>) -> Self::Pointer<T>;
     fn as_ptr<T>(this: &Self::Pointer<T>) -> *const T;
+    unsafe fn from_raw<T>(this: *const T) -> Self::Pointer<T>;
 }
 
 pub struct RcPointer;
@@ -49,6 +50,10 @@ impl PointerFamily for RcPointer {
     fn as_ptr<T>(this: &Self::Pointer<T>) -> *const T {
         Rc::as_ptr(this)
     }
+
+    unsafe fn from_raw<T>(this: *const T) -> Self::Pointer<T> {
+        Rc::from_raw(this)
+    }
 }
 
 pub struct ArcPointer;
@@ -86,5 +91,9 @@ impl PointerFamily for ArcPointer {
 
     fn as_ptr<T>(this: &Self::Pointer<T>) -> *const T {
         Arc::as_ptr(this)
+    }
+
+    unsafe fn from_raw<T>(this: *const T) -> Self::Pointer<T> {
+        Arc::from_raw(this)
     }
 }

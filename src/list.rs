@@ -15,7 +15,7 @@ use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData};
 use crate::{
     handler::{DefaultDropHandler, DropHandler},
     shared::{ArcPointer, PointerFamily, RcPointer},
-    unrolled::{ConsumingWrapper, IterWrapper, UnrolledList},
+    unrolled::{ConsumingWrapper, IterWrapper, UnrolledCell, UnrolledList},
 };
 
 /// A persistent list.
@@ -67,6 +67,12 @@ pub type List<T> = GenericList<T, RcPointer, 256>;
 
 pub type SharedVList<T> = GenericList<T, ArcPointer, 2, 2>;
 pub type VList<T> = GenericList<T, RcPointer, 2, 2>;
+
+#[doc(hidden)]
+#[derive(Copy, Clone)]
+pub struct RawCell<T: Clone, P: PointerFamily = RcPointer, const N: usize = 256, const G: usize = 1>(
+    *const UnrolledCell<T, P, N, G>,
+);
 
 impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> Clone
     for GenericList<T, P, N, G, D>
@@ -154,6 +160,16 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
                 Self(x, PhantomData)
             })
             .collect()
+    }
+
+    #[doc(hidden)]
+    pub fn as_ptr(&self) -> RawCell<T, P, N, G> {
+        RawCell(self.0.as_ptr())
+    }
+
+    #[doc(hidden)]
+    pub unsafe fn from_raw(cell: RawCell<T, P, N, G>) -> Self {
+        Self(UnrolledList(P::from_raw(cell.0)), PhantomData)
     }
 
     /// Get the length of the list
