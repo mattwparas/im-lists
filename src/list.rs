@@ -70,9 +70,13 @@ pub type VList<T> = GenericList<T, RcPointer, 2, 2>;
 
 #[doc(hidden)]
 #[derive(Copy, Clone)]
-pub struct RawCell<T: Clone, P: PointerFamily = RcPointer, const N: usize = 256, const G: usize = 1>(
-    *const UnrolledCell<T, P, N, G>,
-);
+pub struct RawCell<
+    T: Clone,
+    P: PointerFamily,
+    const N: usize,
+    const G: usize,
+    D: DropHandler<GenericList<T, P, N, G, D>>,
+>(*const UnrolledCell<T, P, N, G>, PhantomData<D>);
 
 impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> Clone
     for GenericList<T, P, N, G, D>
@@ -163,12 +167,23 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 
     #[doc(hidden)]
-    pub fn as_ptr(&self) -> RawCell<T, P, N, G> {
-        RawCell(self.0.as_ptr())
+    pub fn as_ptr(&self) -> RawCell<T, P, N, G, D> {
+        RawCell(self.0.as_ptr(), PhantomData)
     }
 
     #[doc(hidden)]
-    pub unsafe fn from_raw(cell: RawCell<T, P, N, G>) -> Self {
+    pub unsafe fn call_from_raw<O, F: FnOnce(&Self) -> O>(
+        cell: RawCell<T, P, N, G, D>,
+        func: F,
+    ) -> O {
+        let value = unsafe { Self::from_raw(cell) };
+        let res = func(&value);
+        std::mem::forget(value);
+        res
+    }
+
+    #[doc(hidden)]
+    pub unsafe fn from_raw(cell: RawCell<T, P, N, G, D>) -> Self {
         Self(UnrolledList(P::from_raw(cell.0)), PhantomData)
     }
 
@@ -1602,5 +1617,18 @@ mod arc_tests {
         }
 
         // assert!(list.is_empty())
+    }
+
+    #[test]
+    fn raw_test() {
+        let list = (0..1000usize).into_iter().collect::<SharedVList<_>>();
+
+        // Get the inner pointer, and then otherwise
+        // call the drop implementation as neatly as possible.
+        let pointer = list.as_ptr();
+
+        // Create value from pointer
+        let value = unsafe { SharedVList::from_raw(pointer) };
+        std::mem::forget(value);
     }
 }
