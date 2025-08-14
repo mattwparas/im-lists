@@ -427,20 +427,36 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     // Returns None if the next is empty - otherwise updates self to be the rest
     pub fn cdr_mut(&mut self) -> Option<&mut Self> {
         if self.0.index > 1 {
+            // This will allocate a new cell
             P::make_mut(&mut self.0).index -= 1;
             Some(self)
         } else {
-            let inner = P::make_mut(&mut self.0);
-            let output = inner.next.take();
-            match output {
-                Some(x) => {
-                    *self = x;
-                    Some(self)
+            let inner = P::get_mut(&mut self.0);
+
+            match inner {
+                Some(inner) => {
+                    let output = inner.next.take();
+                    match output {
+                        Some(x) => {
+                            *self = x;
+                            Some(self)
+                        }
+                        None => {
+                            *self = Self::new();
+                            None
+                        }
+                    }
                 }
-                None => {
-                    *self = Self::new();
-                    None
-                }
+                None => match &self.0.next {
+                    Some(x) => {
+                        *self = x.clone();
+                        Some(self)
+                    }
+                    None => {
+                        *self = Self::new();
+                        None
+                    }
+                },
             }
         }
     }
