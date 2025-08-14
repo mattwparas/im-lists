@@ -10,7 +10,12 @@
 //! Using the mutable functions when possible enables in place mutation. Much of the internal structure is shared,
 //! so even immutable functions can be fast, but the mutable functions will be faster.
 
-use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData};
+use std::{
+    cmp::Ordering,
+    iter::FromIterator,
+    marker::PhantomData,
+    mem::{ManuallyDrop, MaybeUninit},
+};
 
 use crate::{
     handler::{DefaultDropHandler, DropHandler},
@@ -150,8 +155,21 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 
     #[doc(hidden)]
-    pub fn draining_iterator(mut self) -> impl Iterator<Item = T> {
-        std::mem::take(&mut self.0).draining_iterator()
+    pub fn draining_iterator(
+        mut self,
+        // default: UnrolledList<T, P, N, G>,
+    ) -> impl Iterator<Item = T> {
+        // std::mem::take(&mut self.0).draining_iterator()
+        // std::mem::replace(&mut self.0, default).draining_iterator()
+        // todo!()
+        let x = MaybeUninit::new(self);
+        let x = x.as_ptr();
+
+        unsafe { std::ptr::read(&(*x).0).draining_iterator() }
+
+        // self.0.draining_iterator()
+        // ManuallyDrop::take(slot)
+        // todo!()
     }
 
     #[doc(hidden)]
