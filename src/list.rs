@@ -10,12 +10,17 @@
 //! Using the mutable functions when possible enables in place mutation. Much of the internal structure is shared,
 //! so even immutable functions can be fast, but the mutable functions will be faster.
 
-use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData};
+use std::{
+    cmp::Ordering,
+    iter::FromIterator,
+    marker::PhantomData,
+    mem::{ManuallyDrop, MaybeUninit},
+};
 
 use crate::{
     handler::{DefaultDropHandler, DropHandler},
     shared::{ArcPointer, PointerFamily, RcPointer},
-    unrolled::{ConsumingWrapper, IterWrapper, UnrolledList},
+    unrolled::{ConsumingWrapper, IterWrapper, UnrolledCell, UnrolledList},
 };
 
 /// A persistent list.
@@ -67,6 +72,16 @@ pub type List<T> = GenericList<T, RcPointer, 256>;
 
 pub type SharedVList<T> = GenericList<T, ArcPointer, 2, 2>;
 pub type VList<T> = GenericList<T, RcPointer, 2, 2>;
+
+#[doc(hidden)]
+#[derive(Copy, Clone)]
+pub struct RawCell<
+    T: Clone,
+    P: PointerFamily,
+    const N: usize,
+    const G: usize,
+    D: DropHandler<GenericList<T, P, N, G, D>>,
+>(*const UnrolledCell<T, P, N, G>, PhantomData<D>);
 
 impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> Clone
     for GenericList<T, P, N, G, D>
@@ -140,8 +155,21 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 
     #[doc(hidden)]
-    pub fn draining_iterator(mut self) -> impl Iterator<Item = T> {
-        std::mem::take(&mut self.0).draining_iterator()
+    pub fn draining_iterator(
+        mut self,
+        // default: UnrolledList<T, P, N, G>,
+    ) -> impl Iterator<Item = T> {
+        // std::mem::take(&mut self.0).draining_iterator()
+        // std::mem::replace(&mut self.0, default).draining_iterator()
+        // todo!()
+        let x = MaybeUninit::new(self);
+        let x = x.as_ptr();
+
+        unsafe { std::ptr::read(&(*x).0).draining_iterator() }
+
+        // self.0.draining_iterator()
+        // ManuallyDrop::take(slot)
+        // todo!()
     }
 
     #[doc(hidden)]
@@ -154,6 +182,32 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
                 Self(x, PhantomData)
             })
             .collect()
+    }
+
+    #[doc(hidden)]
+    pub fn as_ptr(&self) -> RawCell<T, P, N, G, D> {
+        RawCell(self.0.as_ptr(), PhantomData)
+    }
+
+    /// Call a function on a raw pointer
+    /// # Safety
+    /// This must be called with a valid pointer as returned from as_ptr
+    #[doc(hidden)]
+    pub unsafe fn call_from_raw<O, F: FnOnce(&Self) -> O>(
+        cell: RawCell<T, P, N, G, D>,
+        func: F,
+    ) -> O {
+        let value = unsafe { Self::from_raw(cell) };
+        let res = func(&value);
+        std::mem::forget(value);
+        res
+    }
+
+    /// # Safety
+    /// This must be called with a valid pointer as returned from as_ptr
+    #[doc(hidden)]
+    unsafe fn from_raw(cell: RawCell<T, P, N, G, D>) -> Self {
+        Self(UnrolledList(P::from_raw(cell.0)), PhantomData)
     }
 
     /// Get the length of the list
@@ -1586,5 +1640,18 @@ mod arc_tests {
         }
 
         // assert!(list.is_empty())
+    }
+
+    #[test]
+    fn raw_test() {
+        let list = (0..1000usize).into_iter().collect::<SharedVList<_>>();
+
+        // Get the inner pointer, and then otherwise
+        // call the drop implementation as neatly as possible.
+        let pointer = list.as_ptr();
+
+        // Create value from pointer
+        let value = unsafe { SharedVList::from_raw(pointer) };
+        std::mem::forget(value);
     }
 }
