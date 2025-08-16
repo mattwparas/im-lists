@@ -580,7 +580,7 @@ fn append_zero_then_popfront() {
     }
 }
 
-run_property_tests!(unrolled_linked_list, crate::unrolled::UnrolledList<T, RcPointer, 256>);
+run_property_tests!(unrolled_linked_list, crate::unrolled::UnrolledList<T, RcPointer, 256, 1>);
 
 run_property_tests!(vlist, crate::unrolled::UnrolledList<T, RcPointer, 4, 2>);
 

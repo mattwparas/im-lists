@@ -10,12 +10,7 @@
 //! Using the mutable functions when possible enables in place mutation. Much of the internal structure is shared,
 //! so even immutable functions can be fast, but the mutable functions will be faster.
 
-use std::{
-    cmp::Ordering,
-    iter::FromIterator,
-    marker::PhantomData,
-    mem::{ManuallyDrop, MaybeUninit},
-};
+use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData, mem::MaybeUninit};
 
 use crate::{
     handler::{DefaultDropHandler, DropHandler},
@@ -60,7 +55,7 @@ use crate::{
 /// This means for operations that for a normal linked list may take linear time *Θ(n)*, we get a constant factor
 /// decrease of either a factor of *m* or *m / 2*. Similarly, we will see O(log(n)) performance characteristics if the growth rate is set to be larger than 1.
 pub struct GenericList<
-    T: Clone,
+    T: Clone + 'static,
     P: PointerFamily = RcPointer,
     const N: usize = 256,
     const G: usize = 1,
@@ -76,7 +71,7 @@ pub type VList<T> = GenericList<T, RcPointer, 2, 2>;
 #[doc(hidden)]
 #[derive(Copy, Clone)]
 pub struct RawCell<
-    T: Clone,
+    T: Clone + 'static,
     P: PointerFamily,
     const N: usize,
     const G: usize,
@@ -159,13 +154,13 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
         mut self,
         // default: UnrolledList<T, P, N, G>,
     ) -> impl Iterator<Item = T> {
-        // std::mem::take(&mut self.0).draining_iterator()
+        std::mem::take(&mut self.0).draining_iterator()
         // std::mem::replace(&mut self.0, default).draining_iterator()
         // todo!()
-        let x = MaybeUninit::new(self);
-        let x = x.as_ptr();
+        // let x = MaybeUninit::new(self);
+        // let x = x.as_ptr();
 
-        unsafe { std::ptr::read(&(*x).0).draining_iterator() }
+        // unsafe { std::ptr::read(&(*x).0).draining_iterator() }
 
         // self.0.draining_iterator()
         // ManuallyDrop::take(slot)
@@ -647,7 +642,7 @@ impl<
 /// An iterator over lists with values of type `T`.
 pub struct Iter<
     'a,
-    T: Clone,
+    T: Clone + 'static,
     P: PointerFamily,
     const N: usize,
     const G: usize,
@@ -656,7 +651,7 @@ pub struct Iter<
 
 impl<
         'a,
-        T: Clone,
+        T: Clone + 'static,
         P: PointerFamily,
         const N: usize,
         const G: usize,
@@ -705,7 +700,7 @@ impl<
 
 /// A consuming iterator over lists with values of type `T`.
 pub struct ConsumingIter<
-    T: Clone,
+    T: Clone + 'static,
     P: PointerFamily,
     const N: usize,
     const G: usize,
