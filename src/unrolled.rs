@@ -777,33 +777,36 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
             None
         }
 
-        /*
+        // let mut _self = &mut self.cur;
+        // let mut ret = None;
 
-        let mut _self = &mut self.cur;
-        let mut ret = None;
+        // if let Some(next) = _self.as_mut().and_then(|x| x.0.next.as_ref()) {
+        //     // If the next is empty, then we don't want to point to it?
+        //     if next.is_empty() {
+        //         let mut value = None;
+        //         std::mem::swap(&mut self.cur, &mut value);
+        //         return value;
+        //     }
 
-        if let Some(next) = _self.as_mut().and_then(|x| x.0.next.as_ref()) {
-            // If we can, drop these values!
-            if next.strong_count() == 1 && P::strong_count(&next.0.elements) == 1 {
-                // self.cur = _self.0.next.clone();
-                // self.cur = P::get_mut(&mut _self.0).and_then(|x| x.next.take());
-                // todo!()
+        //     // If we can, drop these values!
+        //     if next.strong_count() == 1 && P::strong_count(&next.0.elements) == 1 {
+        //         // self.cur = _self.0.next.clone();
+        //         // self.cur = P::get_mut(&mut _self.0).and_then(|x| x.next.take());
+        //         // todo!()
 
-                let mut value = _self
-                    .as_mut()
-                    .and_then(|x| P::get_mut(&mut x.0).and_then(|x| x.next.take()));
+        //         let mut value = _self
+        //             .as_mut()
+        //             .and_then(|x| P::get_mut(&mut x.0).and_then(|x| x.next.take()));
 
-                std::mem::swap(&mut self.cur, &mut value);
+        //         std::mem::swap(&mut self.cur, &mut value);
 
-                ret = value
-            } else {
-                self.cur = None
-            }
-        } else {
-            self.cur = None
-        }
-
-        */
+        //         ret = value
+        //     } else {
+        //         self.cur = None
+        //     }
+        // } else {
+        //     self.cur = None
+        // }
 
         // ret
     }
