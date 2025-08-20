@@ -900,8 +900,15 @@ mod tests {
     use crate::{list, vlist};
 
     #[test]
-    fn strong_count() {
+    fn strong_count_empty() {
         let list: List<usize> = List::new();
+        assert!(list.strong_count() >= 1);
+    }
+
+    #[test]
+    fn strong_count() {
+        let mut list: List<usize> = List::new();
+        list.cons_mut(1);
         assert_eq!(list.strong_count(), 1);
     }
 
@@ -1268,8 +1275,15 @@ mod arc_tests {
     use crate::{shared_list, shared_vlist, vlist};
 
     #[test]
-    fn strong_count() {
+    fn strong_count_empty() {
         let list: SharedList<usize> = SharedList::new();
+        assert!(list.strong_count() >= 1);
+    }
+
+    #[test]
+    fn strong_count() {
+        let mut list: SharedList<usize> = SharedList::new();
+        list.cons_mut(1);
         assert_eq!(list.strong_count(), 1);
     }
 
