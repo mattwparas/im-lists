@@ -10,7 +10,7 @@
 //! Using the mutable functions when possible enables in place mutation. Much of the internal structure is shared,
 //! so even immutable functions can be fast, but the mutable functions will be faster.
 
-use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData, mem::MaybeUninit};
+use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData};
 
 use crate::{
     handler::{DefaultDropHandler, DropHandler},
