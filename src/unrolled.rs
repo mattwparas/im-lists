@@ -16,7 +16,7 @@ type ConsumingIter<T, P, const N: usize, const G: usize> = FlatMap<
     fn(UnrolledList<T, P, N, G>) -> MaybeCloned<T, P, N, G>, // Rev<std::iter::Take<std::vec::IntoIter<T>>>,
 >;
 
-enum MaybeCloned<T: Clone, P: PointerFamily, const N: usize, const G: usize> {
+enum MaybeCloned<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
     Owned(Rev<std::iter::Take<std::vec::IntoIter<T>>>),
     Cloned(OwnedNodeIterator<T, P, N, G>),
 }
@@ -86,8 +86,24 @@ type DrainingConsumingIter<T, P, const N: usize, const G: usize> = FlatMap<
     fn(UnrolledList<T, P, N, G>) -> Rev<std::iter::Take<std::vec::IntoIter<T>>>,
 >;
 
+fn empty_list<T: Clone, P: PointerFamily, const N: usize, const G: usize>(
+) -> P::Pointer<UnrolledCell<T, P, N, G>>
+where
+    P::Pointer<UnrolledCell<T, P, N, G>>: 'static,
+{
+    let mut output = None;
+    generic_singleton::get_or_init_thread_local!(
+        || P::new(UnrolledCell::new()),
+        |cell: &P::Pointer<UnrolledCell<T, P, N, G>>| {
+            output = Some(P::clone(cell));
+        }
+    );
+
+    output.unwrap()
+}
+
 #[derive(Eq)]
-pub(crate) struct UnrolledList<T: Clone, P: PointerFamily, const N: usize, const G: usize = 1>(
+pub struct UnrolledList<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize>(
     pub(crate) P::Pointer<UnrolledCell<T, P, N, G>>,
 );
 
@@ -126,7 +142,13 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Default
 
 impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T, P, N, G> {
     pub fn new() -> Self {
-        UnrolledList(P::new(UnrolledCell::new()))
+        // UnrolledList(P::new(UnrolledCell::new()))
+
+        UnrolledList(empty_list::<T, P, N, G>())
+    }
+
+    pub fn as_ptr(&self) -> *const UnrolledCell<T, P, N, G> {
+        P::as_ptr(&self.0)
     }
 
     pub fn new_with_capacity() -> Self {
@@ -423,20 +445,36 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     // Returns None if the next is empty - otherwise updates self to be the rest
     pub fn cdr_mut(&mut self) -> Option<&mut Self> {
         if self.0.index > 1 {
+            // This will allocate a new cell
             P::make_mut(&mut self.0).index -= 1;
             Some(self)
         } else {
-            let inner = P::make_mut(&mut self.0);
-            let output = inner.next.take();
-            match output {
-                Some(x) => {
-                    *self = x;
-                    Some(self)
+            let inner = P::get_mut(&mut self.0);
+
+            match inner {
+                Some(inner) => {
+                    let output = inner.next.take();
+                    match output {
+                        Some(x) => {
+                            *self = x;
+                            Some(self)
+                        }
+                        None => {
+                            *self = Self::new();
+                            None
+                        }
+                    }
                 }
-                None => {
-                    *self = Self::new();
-                    None
-                }
+                None => match &self.0.next {
+                    Some(x) => {
+                        *self = x.clone();
+                        Some(self)
+                    }
+                    None => {
+                        *self = Self::new();
+                        None
+                    }
+                },
             }
         }
     }
@@ -573,7 +611,9 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 }
 
 // Don't blow the stack
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Drop for UnrolledCell<T, P, N, G> {
+impl<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> Drop
+    for UnrolledCell<T, P, N, G>
+{
     fn drop(&mut self) {
         let mut cur = self.next.take().map(|x| x.0);
         loop {
@@ -588,7 +628,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Drop for Unroll
     }
 }
 
-pub(crate) struct UnrolledCell<T: Clone, P: PointerFamily, const N: usize, const G: usize> {
+pub struct UnrolledCell<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
     index: usize,
     elements: P::Pointer<Vec<T>>,
     pub(crate) next: Option<UnrolledList<T, P, N, G>>,
@@ -702,7 +742,12 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Extend<T>
     }
 }
 
-pub(crate) struct DrainingNodeIter<T: Clone, P: PointerFamily, const N: usize, const G: usize> {
+pub(crate) struct DrainingNodeIter<
+    T: Clone + 'static,
+    P: PointerFamily,
+    const N: usize,
+    const G: usize,
+> {
     cur: Option<UnrolledList<T, P, N, G>>,
     _inner: PhantomData<T>,
 }
@@ -712,6 +757,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
 {
     type Item = UnrolledList<T, P, N, G>;
     fn next(&mut self) -> Option<Self::Item> {
+        // This is doing allocation. Don't want that.
+
         if let Some(mut _self) = std::mem::take(&mut self.cur) {
             if let Some(next) = _self.0.next.as_ref() {
                 // If we can, drop these values!
@@ -729,10 +776,43 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
         } else {
             None
         }
+
+        // let mut _self = &mut self.cur;
+        // let mut ret = None;
+
+        // if let Some(next) = _self.as_mut().and_then(|x| x.0.next.as_ref()) {
+        //     // If the next is empty, then we don't want to point to it?
+        //     if next.is_empty() {
+        //         let mut value = None;
+        //         std::mem::swap(&mut self.cur, &mut value);
+        //         return value;
+        //     }
+
+        //     // If we can, drop these values!
+        //     if next.strong_count() == 1 && P::strong_count(&next.0.elements) == 1 {
+        //         // self.cur = _self.0.next.clone();
+        //         // self.cur = P::get_mut(&mut _self.0).and_then(|x| x.next.take());
+        //         // todo!()
+
+        //         let mut value = _self
+        //             .as_mut()
+        //             .and_then(|x| P::get_mut(&mut x.0).and_then(|x| x.next.take()));
+
+        //         std::mem::swap(&mut self.cur, &mut value);
+
+        //         ret = value
+        //     } else {
+        //         self.cur = None
+        //     }
+        // } else {
+        //     self.cur = None
+        // }
+
+        // ret
     }
 }
 
-pub(crate) struct NodeIter<T: Clone, P: PointerFamily, const N: usize, const G: usize> {
+pub(crate) struct NodeIter<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
     cur: Option<UnrolledList<T, P, N, G>>,
     _inner: PhantomData<T>,
 }
@@ -749,12 +829,18 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator for No
     }
 }
 
-pub(crate) struct NodeIterRef<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> {
+pub(crate) struct NodeIterRef<
+    'a,
+    T: Clone + 'static,
+    P: PointerFamily,
+    const N: usize,
+    const G: usize,
+> {
     cur: Option<&'a UnrolledList<T, P, N, G>>,
     _inner: PhantomData<T>,
 }
 
-impl<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
+impl<'a, T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> Iterator
     for NodeIterRef<'a, T, P, N, G>
 {
     type Item = &'a UnrolledList<T, P, N, G>;
@@ -769,8 +855,8 @@ impl<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
     }
 }
 
-pub(crate) struct DrainingConsumingWrapper<
-    T: Clone,
+pub struct DrainingConsumingWrapper<
+    T: Clone + 'static,
     P: PointerFamily,
     const N: usize,
     const G: usize,
@@ -801,8 +887,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
     }
 }
 
-// TODO have this expose tryfold
-pub(crate) struct ConsumingWrapper<T: Clone, P: PointerFamily, const N: usize, const G: usize>(
+pub struct ConsumingWrapper<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize>(
     ConsumingIter<T, P, N, G>,
 );
 
@@ -831,7 +916,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
     }
 }
 
-struct OwnedNodeIterator<T: Clone, P: PointerFamily, const N: usize, const G: usize> {
+struct OwnedNodeIterator<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
     list: UnrolledCell<T, P, N, G>,
 }
 
@@ -890,7 +975,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterator
 }
 
 // TODO have this also expose TryFold
-pub(crate) struct IterWrapper<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize>(
+pub struct IterWrapper<'a, T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize>(
     RefIter<'a, T, P, N, G>,
 );
 
@@ -1134,7 +1219,7 @@ mod tests {
 
     use crate::shared::RcPointer;
 
-    type RcList<T> = UnrolledList<T, RcPointer, 256>;
+    type RcList<T> = UnrolledList<T, RcPointer, 256, 1>;
 
     use super::*;
 
@@ -1182,7 +1267,7 @@ mod iterator_tests {
 
     const CAPACITY: usize = 256;
 
-    type RcList<T> = UnrolledList<T, RcPointer, 256>;
+    type RcList<T> = UnrolledList<T, RcPointer, 256, 1>;
 
     #[test]
     fn check_size() {
@@ -1686,7 +1771,7 @@ mod reference_counting_correctness {
 
     use super::*;
     use crate::shared::RcPointer;
-    type RcList<T> = UnrolledList<T, RcPointer, 256>;
+    type RcList<T> = UnrolledList<T, RcPointer, 256, 1>;
 
     #[derive(Clone)]
     enum Value {

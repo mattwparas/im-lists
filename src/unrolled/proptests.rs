@@ -83,7 +83,8 @@ fn action_strategy() -> impl Strategy<Value = Action> {
         any::<usize>().prop_map(Action::PushBack),
         Just(Action::PopFront),
         // Getting values should work...
-        (0..100usize).prop_map(Action::Get)
+        (0..100usize).prop_map(Action::Get),
+        Just(Action::Clone),
     ]
 }
 
@@ -580,7 +581,7 @@ fn append_zero_then_popfront() {
     }
 }
 
-run_property_tests!(unrolled_linked_list, crate::unrolled::UnrolledList<T, RcPointer, 256>);
+run_property_tests!(unrolled_linked_list, crate::unrolled::UnrolledList<T, RcPointer, 256, 1>);
 
 run_property_tests!(vlist, crate::unrolled::UnrolledList<T, RcPointer, 4, 2>);
 
