@@ -83,7 +83,8 @@ fn action_strategy() -> impl Strategy<Value = Action> {
         any::<usize>().prop_map(Action::PushBack),
         Just(Action::PopFront),
         // Getting values should work...
-        (0..100usize).prop_map(Action::Get)
+        (0..100usize).prop_map(Action::Get),
+        Just(Action::Clone),
     ]
 }
 
