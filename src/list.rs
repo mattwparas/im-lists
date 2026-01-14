@@ -113,6 +113,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 
     #[doc(hidden)]
+    pub fn inner_ptr(&self) -> &P::Pointer<UnrolledCell<T, P, N, G>> {
+        &self.0 .0
+    }
+
+    #[doc(hidden)]
     pub fn storage_ptr_eq(&self, other: &Self) -> bool {
         self.0.shared_ptr_eq(&other.0)
     }
