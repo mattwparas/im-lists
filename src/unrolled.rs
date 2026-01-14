@@ -103,6 +103,7 @@ where
 }
 
 #[derive(Eq)]
+#[repr(transparent)]
 pub struct UnrolledList<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize>(
     pub(crate) P::Pointer<UnrolledCell<T, P, N, G>>,
 );

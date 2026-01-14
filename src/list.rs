@@ -54,6 +54,7 @@ use crate::{
 /// In the worst case, a node will be on average half filled. In the best case, all nodes are completely full.
 /// This means for operations that for a normal linked list may take linear time *Θ(n)*, we get a constant factor
 /// decrease of either a factor of *m* or *m / 2*. Similarly, we will see O(log(n)) performance characteristics if the growth rate is set to be larger than 1.
+#[repr(transparent)]
 pub struct GenericList<
     T: Clone + 'static,
     P: PointerFamily = RcPointer,
