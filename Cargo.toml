@@ -1,6 +1,6 @@
 [package]
 name = "im-lists"
-version = "0.11.3"
+version = "0.11.4"
 authors = ["mattwparas <matthewparas2020@u.northwestern.edu>"]
 edition = "2021"
 readme = "README.md"

@@ -629,9 +629,10 @@ impl<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> Drop
     }
 }
 
+#[repr(C)]
 pub struct UnrolledCell<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
     index: usize,
-    elements: P::Pointer<Vec<T>>,
+    pub(crate) elements: P::Pointer<Vec<T>>,
     pub(crate) next: Option<UnrolledList<T, P, N, G>>,
     size: usize,
 }

@@ -113,6 +113,16 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 
     #[doc(hidden)]
+    pub fn index(&self) -> usize {
+        self.0.index()
+    }
+
+    #[doc(hidden)]
+    pub fn elements_length(&self) -> usize {
+        self.0 .0.elements.len()
+    }
+
+    #[doc(hidden)]
     pub fn inner_ptr(&self) -> &P::Pointer<UnrolledCell<T, P, N, G>> {
         &self.0 .0
     }
