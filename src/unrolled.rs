@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod proptests;
 
+use shared_vector::{AtomicSharedVector, Vector};
 use smallvec::SmallVec;
 
 use crate::shared::PointerFamily;
@@ -12,67 +13,12 @@ use std::marker::PhantomData;
 type ConsumingIter<T, P, const N: usize, const G: usize> = FlatMap<
     NodeIter<T, P, N, G>,
     // Rev<std::iter::Take<std::vec::IntoIter<T>>>,
-    MaybeCloned<T, P, N, G>,
-    fn(UnrolledList<T, P, N, G>) -> MaybeCloned<T, P, N, G>, // Rev<std::iter::Take<std::vec::IntoIter<T>>>,
+    MaybeCloned<T, N, G>,
+    fn(UnrolledList<T, P, N, G>) -> MaybeCloned<T, N, G>, // Rev<std::iter::Take<std::vec::IntoIter<T>>>,
 >;
 
-enum MaybeCloned<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
-    Owned(Rev<std::iter::Take<std::vec::IntoIter<T>>>),
-    Cloned(OwnedNodeIterator<T, P, N, G>),
-}
-
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
-    for MaybeCloned<T, P, N, G>
-{
-    type Item = T;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            MaybeCloned::Owned(o) => o.next(),
-            MaybeCloned::Cloned(r) => r.next(),
-        }
-    }
-
-    #[inline(always)]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        match self {
-            MaybeCloned::Owned(o) => o.size_hint(),
-            MaybeCloned::Cloned(r) => r.size_hint(),
-        }
-    }
-
-    #[inline(always)]
-    fn fold<B, F>(self, init: B, f: F) -> B
-    where
-        Self: Sized,
-        F: FnMut(B, Self::Item) -> B,
-    {
-        match self {
-            MaybeCloned::Owned(o) => o.fold(init, f),
-            MaybeCloned::Cloned(r) => r.fold(init, f),
-        }
-    }
-
-    #[inline]
-    fn nth(&mut self, n: usize) -> Option<T> {
-        match self {
-            MaybeCloned::Owned(o) => o.nth(n),
-            MaybeCloned::Cloned(r) => r.nth(n),
-        }
-    }
-
-    #[inline]
-    fn find<F>(&mut self, predicate: F) -> Option<Self::Item>
-    where
-        F: FnMut(&Self::Item) -> bool,
-    {
-        match self {
-            MaybeCloned::Owned(o) => o.find(predicate),
-            MaybeCloned::Cloned(r) => r.find(predicate),
-        }
-    }
-}
+type MaybeCloned<T, const N: usize, const G: usize> =
+    Rev<std::iter::Take<shared_vector::IntoIter<T>>>;
 
 type RefIter<'a, T, P, const N: usize, const G: usize> = FlatMap<
     NodeIterRef<'a, T, P, N, G>,
@@ -82,8 +28,10 @@ type RefIter<'a, T, P, const N: usize, const G: usize> = FlatMap<
 
 type DrainingConsumingIter<T, P, const N: usize, const G: usize> = FlatMap<
     DrainingNodeIter<T, P, N, G>,
-    Rev<std::iter::Take<std::vec::IntoIter<T>>>,
-    fn(UnrolledList<T, P, N, G>) -> Rev<std::iter::Take<std::vec::IntoIter<T>>>,
+    // Rev<std::iter::Take<std::vec::IntoIter<T>>>,
+    Rev<std::iter::Take<shared_vector::IntoIter<T>>>,
+    // fn(UnrolledList<T, P, N, G>) -> Rev<std::iter::Take<std::vec::IntoIter<T>>>,
+    fn(UnrolledList<T, P, N, G>) -> Rev<std::iter::Take<shared_vector::IntoIter<T>>>,
 >;
 
 fn empty_list<T: Clone, P: PointerFamily, const N: usize, const G: usize>(
@@ -167,7 +115,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     }
 
     pub fn shared_ptr_eq(&self, other: &Self) -> bool {
-        P::ptr_eq(&self.0.elements, &other.0.elements) && self.0.index == other.0.index
+        // P::ptr_eq(&self.0.elements, &other.0.elements) && self.0.index == other.0.index
+        self.0.elements.ptr_eq(&other.0.elements) && self.0.index == other.0.index
     }
 
     pub fn as_ptr_usize(&self) -> usize {
@@ -175,7 +124,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     }
 
     pub fn elements_as_ptr_usize(&self) -> usize {
-        P::as_ptr(&self.0.elements) as usize
+        // P::as_ptr(&self.0.elements) as usize
+        self.0.elements.as_ptr() as usize
     }
 
     pub fn next_ptr_as_usize(&self) -> Option<usize> {
@@ -192,11 +142,22 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 
             P::try_unwrap(x.0)
                 .map(|mut cell| {
-                    P::get_mut(&mut cell.elements)
-                        .map(|vec| std::mem::take(vec).into_iter().take(index).rev())
-                        .unwrap_or_else(|| Vec::new().into_iter().take(0).rev())
+                    if cell.elements.is_unique() {
+                        // Get the values inside
+                        std::mem::take(&mut cell.elements)
+                            .into_unique()
+                            .into_iter()
+                            .take(index)
+                            .rev()
+                    } else {
+                        Vector::new().into_iter().take(0).rev()
+                    }
+
+                    // P::get_mut(&mut cell.elements)
+                    //     .map(|vec| std::mem::take(vec).into_iter().take(index).rev())
+                    //     .unwrap_or_else(|| Vec::new().into_iter().take(0).rev())
                 })
-                .unwrap_or_else(|| Vec::new().into_iter().take(0).rev())
+                .unwrap_or_else(|| Vector::new().into_iter().take(0).rev())
         }))
     }
 
@@ -219,25 +180,30 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         let mut left = node_iter.next().expect("This node should always exist");
         {
             let inner = P::make_mut(&mut left.0);
-            let elements_mut = P::make_mut(&mut inner.elements);
+            // let elements_mut = P::make_mut(&mut inner.elements);
 
-            if inner.index < elements_mut.len() {
-                elements_mut.truncate(inner.index);
+            if inner.index < inner.elements.len() {
+                // elements_mut.truncate(inner.index);
+                truncate(&mut inner.elements, inner.index);
             }
 
-            elements_mut.reverse();
+            // elements_mut.reverse();
+            inner.elements.reverse();
             inner.next = None;
         }
 
         for mut right in node_iter {
             let cell = P::make_mut(&mut right.0);
-            let elements_mut = P::make_mut(&mut cell.elements);
+            // let elements_mut = P::make_mut(&mut cell.elements);
 
-            if cell.index < elements_mut.len() {
-                elements_mut.truncate(cell.index);
+            if cell.index < cell.elements.len() {
+                // elements_mut.truncate(cell.index);
+
+                truncate(&mut cell.elements, cell.index)
             }
 
-            elements_mut.reverse();
+            // elements_mut.reverse();
+            cell.elements.reverse();
             cell.next = Some(left);
             left = right;
         }
@@ -279,12 +245,21 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
                 inner.next = None;
 
                 // We want to chop off whatever we need to
-                let elements_mut = P::make_mut(&mut inner.elements);
+                // let elements_mut = P::make_mut(&mut inner.elements);
+
+                inner.elements.ensure_unique();
 
                 // Grab the end of the vector, this will be the new backing
-                let remaining = elements_mut.split_off(inner.index - count);
+                // let remaining = elements_mut.split_off(inner.index - count);
+
+                let remaining = split_off(&mut inner.elements, inner.index - count);
+
                 inner.index = count;
-                *elements_mut = remaining;
+
+                // *elements_mut = remaining;
+
+                inner.elements = remaining;
+
                 nodes.push(node);
                 break;
             } else {
@@ -349,21 +324,23 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         // yet been truncated, we should attempt to eagerly do so, otherwise
         // we should fall back to the existing implementation.
         if self.0.index < self.elements().len() {
-            P::make_mut(&mut P::make_mut(&mut self.0).elements).truncate(index);
+            // P::make_mut(&mut P::make_mut(&mut self.0).elements).truncate(index);
+            let cell = P::make_mut(&mut self.0);
+            truncate(&mut cell.elements, index);
         }
 
         // TODO cdr here is an issue - only moves the offset, no way to know that its full
         // Cause its not actually full
         if self.elements().len() > self.size() - 1 {
             // Always initialize a vec with half the capacity of the previous one
-            let mut vec = Vec::with_capacity(self.size() / 2);
+            let mut vec = Vector::with_capacity(self.size() / 2);
             vec.push(value);
 
             // Make dummy node
             // return reference to this new node
             let mut default = UnrolledList(P::new(UnrolledCell {
                 index: 1,
-                elements: P::new(vec),
+                elements: vec.into_shared_atomic(),
                 next: Some(self.clone()),
                 size: self.size() * UnrolledCell::<T, P, N, G>::GROWTH_RATE,
             }));
@@ -372,16 +349,23 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         } else {
             match P::get_mut(&mut self.0) {
                 Some(inner) => {
-                    match P::get_mut(&mut inner.elements) {
-                        Some(reference) => {
-                            reference.push(value);
-                            inner.index += 1;
-                        }
-                        // Just check if its bigger than half, point to it.
-                        None => {
-                            self.slow_path_new_node(value);
-                        }
+                    if inner.elements.is_unique() {
+                        inner.elements.push(value);
+                        inner.index += 1;
+                    } else {
+                        self.slow_path_new_node(value);
                     }
+
+                    // match P::get_mut(&mut inner.elements) {
+                    //     Some(reference) => {
+                    //         reference.push(value);
+                    //         inner.index += 1;
+                    //     }
+                    //     // Just check if its bigger than half, point to it.
+                    //     None => {
+                    //         self.slow_path_new_node(value);
+                    //     }
+                    // }
                 }
                 None => {
                     self.slow_path_new_node(value);
@@ -392,12 +376,12 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 
     fn slow_path_new_node(&mut self, value: T) {
         if self.elements().len() > self.size() / 2 {
-            let mut vec = Vec::with_capacity(N);
+            let mut vec = Vector::with_capacity(N);
             vec.push(value);
 
             let mut default = UnrolledList(P::new(UnrolledCell {
                 index: 1,
-                elements: P::new(vec),
+                elements: vec.into_shared_atomic(),
                 next: Some(self.clone()),
                 size: N,
             }));
@@ -418,9 +402,9 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     // Just pop off the internal value and move the index up
     pub fn pop_front(&mut self) -> Option<T> {
         let cell = P::make_mut(&mut self.0);
-        let elements = P::make_mut(&mut cell.elements);
-
-        let ret = elements.pop();
+        // let elements = P::make_mut(&mut cell.elements);
+        // let ret = elements.pop();
+        let ret = cell.elements.pop();
 
         if ret.is_some() {
             cell.index -= 1;
@@ -632,7 +616,11 @@ impl<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> Drop
 #[repr(C)]
 pub struct UnrolledCell<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
     index: usize,
-    pub(crate) elements: P::Pointer<Vec<T>>,
+    // Can this be repr C as well? That way we can do
+    // cons / cdr without necessarily doing actual calls?
+    // pub(crate) elements: P::Pointer<Vec<T>>,
+    pub(crate) elements: AtomicSharedVector<T>,
+
     pub(crate) next: Option<UnrolledList<T, P, N, G>>,
     size: usize,
 }
@@ -643,7 +631,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Clone
     fn clone(&self) -> Self {
         Self {
             index: self.index,
-            elements: P::clone(&self.elements),
+            elements: self.elements.clone(),
             next: self.next.clone(),
             size: self.size,
         }
@@ -664,7 +652,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
     fn new() -> Self {
         UnrolledCell {
             index: 0,
-            elements: P::new(Vec::new()),
+            elements: AtomicSharedVector::new(),
             next: None,
             size: N,
         }
@@ -673,7 +661,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
     fn new_with_capacity() -> Self {
         UnrolledCell {
             index: 0,
-            elements: P::new(Vec::with_capacity(N)),
+            elements: AtomicSharedVector::with_capacity(N),
             next: None,
             size: N,
         }
@@ -700,7 +688,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
     fn advance_cursor(&self) -> Self {
         UnrolledCell {
             index: self.index - 1,
-            elements: P::clone(&self.elements),
+            elements: self.elements.clone(),
             next: self.next.clone(),
             size: self.size,
         }
@@ -708,8 +696,9 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
 
     // TODO make this better
     fn cons_mut(&mut self, value: T) {
-        let reference = P::make_mut(&mut self.elements);
-        reference.push(value);
+        // let reference = P::make_mut(&mut self.elements);
+        self.elements.push(value);
+        // reference.push(value);
         self.index += 1;
     }
 
@@ -721,16 +710,19 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
         if cdr.elements().len() > size - 1 {
             UnrolledList(P::new(UnrolledCell {
                 index: 1,
-                elements: P::new(vec![value]),
+                // elements: P::new(vec![value]),
+                elements: shared_vector::arc_vector![value],
                 next: Some(cdr),
                 size: size * Self::GROWTH_RATE,
             }))
         } else {
             let inner = P::make_mut(&mut cdr.0);
-            let elements = P::make_mut(&mut inner.elements);
+            // let elements = P::make_mut(&mut inner.elements);
 
             inner.index += 1;
-            elements.push(value);
+            // elements.push(value);
+
+            inner.elements.push(value);
             cdr
         }
     }
@@ -764,7 +756,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
         if let Some(mut _self) = std::mem::take(&mut self.cur) {
             if let Some(next) = _self.0.next.as_ref() {
                 // If we can, drop these values!
-                if next.strong_count() == 1 && P::strong_count(&next.0.elements) == 1 {
+                // if next.strong_count() == 1 && P::strong_count(&next.0.elements) == 1 {
+                if next.strong_count() == 1 && next.0.elements.is_unique() {
                     // self.cur = _self.0.next.clone();
                     self.cur = P::get_mut(&mut _self.0).and_then(|x| x.next.take());
                 } else {
@@ -918,25 +911,25 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
     }
 }
 
-struct OwnedNodeIterator<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
-    list: UnrolledCell<T, P, N, G>,
-}
+// struct OwnedNodeIterator<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
+//     list: UnrolledCell<T, P, N, G>,
+// }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
-    for OwnedNodeIterator<T, P, N, G>
-{
-    type Item = T;
+// impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
+//     for OwnedNodeIterator<T, P, N, G>
+// {
+//     type Item = T;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let value = self.list.car().cloned();
-        if self.list.index > 0 {
-            self.list.index -= 1;
-            value
-        } else {
-            None
-        }
-    }
-}
+//     fn next(&mut self) -> Option<Self::Item> {
+//         let value = self.list.car().cloned();
+//         if self.list.index > 0 {
+//             self.list.index -= 1;
+//             value
+//         } else {
+//             None
+//         }
+//     }
+// }
 
 impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterator
     for UnrolledList<T, P, N, G>
@@ -956,6 +949,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterator
             // Otherwise, we end up with a worst of both worlds, since
             // we need to reallocate the whole vec _just_ to get owned
             // references.
+            /*
             let cell = P::make_mut(&mut x.0);
 
             match P::get_mut(&mut cell.elements) {
@@ -967,6 +961,21 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterator
                     list: cell.to_owned(),
                 }), // None => cell.elements.iter().take(x.index()).rev(),
             }
+            */
+
+            let cell = P::make_mut(&mut x.0);
+
+            let v = std::mem::take(&mut cell.elements);
+
+            let unique = v.into_unique();
+
+            unique.into_iter().take(x.index()).rev()
+
+            // cell.elements.into_unique()
+
+            // MaybeCloned::Owned(v.into_unique().into_iter().cloned().take(x.index()).rev())
+
+            // todo!()
 
             // let vec = P::make_mut(&mut cell.elements);
 
@@ -1056,7 +1065,7 @@ impl<I, const N: usize, const G: usize> Iterator for ExponentialChunks<I, N, G>
 where
     I: Iterator,
 {
-    type Item = (usize, Vec<I::Item>);
+    type Item = (usize, Vector<I::Item>);
 
     fn next(&mut self) -> Option<Self::Item> {
         let chunk_size = if self.length > self.running_sum {
@@ -1067,7 +1076,7 @@ where
 
         let iter = self.iter.by_ref().take(chunk_size);
 
-        let mut chunk = Vec::with_capacity(iter.size_hint().1.unwrap_or(0));
+        let mut chunk = Vector::with_capacity(iter.size_hint().1.unwrap_or(0));
 
         for item in iter {
             chunk.push(item);
@@ -1100,7 +1109,7 @@ fn from_vec<T: Clone, P: PointerFamily, const N: usize, const G: usize>(
 
                 UnrolledList(P::new(UnrolledCell {
                     index: elements.len(),
-                    elements: P::new(elements),
+                    elements: elements.into_shared_atomic(),
                     next: None,
                     size,
                 }))
@@ -1156,26 +1165,33 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
                     let left_inner = P::make_mut(cell);
                     let right_inner = P::make_mut(&mut prev.0);
 
-                    let left_vector = P::make_mut(&mut left_inner.elements);
-                    let right_vector = P::make_mut(&mut right_inner.elements);
+                    // let left_vector = P::make_mut(&mut left_inner.elements);
+                    // let right_vector = P::make_mut(&mut right_inner.elements);
 
                     // Drop the useless elements
-                    if left_inner.index < left_vector.len() {
-                        left_vector.truncate(left_inner.index);
+                    if left_inner.index < left_inner.elements.len() {
+                        // left_vector.truncate(left_inner.index);
+
+                        truncate(&mut left_inner.elements, left_inner.index);
                     }
 
                     // TODO
-                    if right_inner.index < right_vector.len() {
-                        right_vector.truncate(right_inner.index);
+                    if right_inner.index < right_inner.elements.len() {
+                        // right_vector.truncate(right_inner.index);
+
+                        truncate(&mut right_inner.elements, right_inner.index);
                     }
 
                     // Perform the actual move of the values
-                    right_vector.append(left_vector);
+                    // right_vector.append(left_vector);
+
+                    right_inner.elements.append(&mut left_inner.elements);
 
                     // Swap the locations now after we've done the update
-                    std::mem::swap(left_vector, right_vector);
+                    std::mem::swap(&mut left_inner.elements, &mut right_inner.elements);
+
                     // Adjust the indices accordingly
-                    left_inner.index = left_vector.len();
+                    left_inner.index = left_inner.elements.len();
                     right_inner.index = 0;
 
                     // Update this node to now point to the right nodes tail
@@ -1214,6 +1230,26 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> From<&[T]>
     fn from(vec: &[T]) -> Self {
         from_vec(vec.to_vec())
     }
+}
+
+fn truncate<T: Clone>(value: &mut AtomicSharedVector<T>, index: usize) {
+    for _ in 0..value.len() - index {
+        value.pop();
+    }
+}
+
+fn split_off<T: Clone>(value: &mut AtomicSharedVector<T>, index: usize) -> AtomicSharedVector<T> {
+    let capacity = value.len() - index;
+    let mut new = Vector::with_capacity(index);
+    for i in index..value.len() {
+        let foo = value.get_mut(i).unwrap();
+        new.push(unsafe { std::ptr::read(foo) })
+    }
+    for _ in 0..capacity {
+        std::mem::forget(value.pop());
+    }
+
+    new.into_shared_atomic()
 }
 
 #[cfg(test)]
@@ -1455,7 +1491,6 @@ mod iterator_tests {
     fn take() {
         let list: RcList<usize> = (0..2 * CAPACITY).into_iter().collect();
         let next = list.take(100);
-
         assert!(Iterator::eq(0..100usize, next.into_iter()))
     }
 
