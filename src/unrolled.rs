@@ -10,23 +10,22 @@ use std::cmp::Ordering;
 use std::iter::{FlatMap, FromIterator, Rev};
 use std::marker::PhantomData;
 
-type ConsumingIter<T, P, const N: usize, const G: usize> = FlatMap<
+type ConsumingIter<T, P, const N: u32, const G: u32> = FlatMap<
     NodeIter<T, P, N, G>,
     // Rev<std::iter::Take<std::vec::IntoIter<T>>>,
     MaybeCloned<T, N, G>,
     fn(UnrolledList<T, P, N, G>) -> MaybeCloned<T, N, G>, // Rev<std::iter::Take<std::vec::IntoIter<T>>>,
 >;
 
-type MaybeCloned<T, const N: usize, const G: usize> =
-    Rev<std::iter::Take<shared_vector::IntoIter<T>>>;
+type MaybeCloned<T, const N: u32, const G: u32> = Rev<std::iter::Take<shared_vector::IntoIter<T>>>;
 
-type RefIter<'a, T, P, const N: usize, const G: usize> = FlatMap<
+type RefIter<'a, T, P, const N: u32, const G: u32> = FlatMap<
     NodeIterRef<'a, T, P, N, G>,
     Rev<std::slice::Iter<'a, T>>,
     fn(&'a UnrolledList<T, P, N, G>) -> Rev<std::slice::Iter<'a, T>>,
 >;
 
-type DrainingConsumingIter<T, P, const N: usize, const G: usize> = FlatMap<
+type DrainingConsumingIter<T, P, const N: u32, const G: u32> = FlatMap<
     DrainingNodeIter<T, P, N, G>,
     // Rev<std::iter::Take<std::vec::IntoIter<T>>>,
     Rev<std::iter::Take<shared_vector::IntoIter<T>>>,
@@ -34,7 +33,7 @@ type DrainingConsumingIter<T, P, const N: usize, const G: usize> = FlatMap<
     fn(UnrolledList<T, P, N, G>) -> Rev<std::iter::Take<shared_vector::IntoIter<T>>>,
 >;
 
-fn empty_list<T: Clone, P: PointerFamily, const N: usize, const G: usize>(
+fn empty_list<T: Clone, P: PointerFamily, const N: u32, const G: u32>(
 ) -> P::Pointer<UnrolledCell<T, P, N, G>>
 where
     P::Pointer<UnrolledCell<T, P, N, G>>: 'static,
@@ -52,20 +51,18 @@ where
 
 #[derive(Eq)]
 #[repr(transparent)]
-pub struct UnrolledList<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize>(
+pub struct UnrolledList<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32>(
     pub(crate) P::Pointer<UnrolledCell<T, P, N, G>>,
 );
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Clone
-    for UnrolledList<T, P, N, G>
-{
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Clone for UnrolledList<T, P, N, G> {
     fn clone(&self) -> Self {
         Self(P::clone(&self.0))
     }
 }
 
 // Check if these lists are equivalent via the iterator
-impl<T: Clone + PartialEq, P: PointerFamily, const N: usize, const G: usize> PartialEq
+impl<T: Clone + PartialEq, P: PointerFamily, const N: u32, const G: u32> PartialEq
     for UnrolledList<T, P, N, G>
 {
     fn eq(&self, other: &Self) -> bool {
@@ -73,7 +70,7 @@ impl<T: Clone + PartialEq, P: PointerFamily, const N: usize, const G: usize> Par
     }
 }
 
-impl<T: Clone + PartialOrd, P: PointerFamily, const N: usize, const G: usize> PartialOrd
+impl<T: Clone + PartialOrd, P: PointerFamily, const N: u32, const G: u32> PartialOrd
     for UnrolledList<T, P, N, G>
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -81,15 +78,13 @@ impl<T: Clone + PartialOrd, P: PointerFamily, const N: usize, const G: usize> Pa
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Default
-    for UnrolledList<T, P, N, G>
-{
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Default for UnrolledList<T, P, N, G> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T, P, N, G> {
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, N, G> {
     pub fn new() -> Self {
         // UnrolledList(P::new(UnrolledCell::new()))
 
@@ -133,7 +128,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     }
 
     pub fn current_node_iter(&self) -> impl Iterator<Item = &T> {
-        self.0.elements.iter().take(self.index()).rev()
+        self.0.elements.iter().take(self.index() as _).rev()
     }
 
     pub fn draining_iterator(self) -> DrainingConsumingWrapper<T, P, N, G> {
@@ -147,7 +142,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
                         std::mem::take(&mut cell.elements)
                             .into_unique()
                             .into_iter()
-                            .take(index)
+                            .take(index as _)
                             .rev()
                     } else {
                         Vector::new().into_iter().take(0).rev()
@@ -169,7 +164,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     // This is actually like O(n / 64) which is actually quite nice
     // Saves us some time
     pub fn len(&self) -> usize {
-        self.node_iter().map(|node| node.index()).sum()
+        self.node_iter().map(|node| node.index() as usize).sum()
     }
 
     // [0 1 2 3 4 5] -> [6 7 8 9 10]
@@ -182,9 +177,9 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
             let inner = P::make_mut(&mut left.0);
             // let elements_mut = P::make_mut(&mut inner.elements);
 
-            if inner.index < inner.elements.len() {
+            if inner.index() < inner.elements.len() {
                 // elements_mut.truncate(inner.index);
-                truncate(&mut inner.elements, inner.index);
+                truncate(&mut inner.elements, inner.index as usize);
             }
 
             // elements_mut.reverse();
@@ -196,10 +191,10 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
             let cell = P::make_mut(&mut right.0);
             // let elements_mut = P::make_mut(&mut cell.elements);
 
-            if cell.index < cell.elements.len() {
+            if cell.index() < cell.elements.len() {
                 // elements_mut.truncate(cell.index);
 
-                truncate(&mut cell.elements, cell.index)
+                truncate(&mut cell.elements, cell.index as usize)
             }
 
             // elements_mut.reverse();
@@ -234,12 +229,12 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
 
         // If we've asked for more elements than this list contains
         // and there aren't any more to follow, just return this list
-        if count > self.0.index && self.0.next.is_none() {
+        if count > self.0.index() && self.0.next.is_none() {
             return self.clone();
         }
 
         for mut node in self.clone().into_node_iter() {
-            if count < node.0.index {
+            if count < node.0.index() {
                 let inner = P::make_mut(&mut node.0);
                 // this is the new tail, point to the end
                 inner.next = None;
@@ -252,9 +247,9 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
                 // Grab the end of the vector, this will be the new backing
                 // let remaining = elements_mut.split_off(inner.index - count);
 
-                let remaining = split_off(&mut inner.elements, inner.index - count);
+                let remaining = split_off(&mut inner.elements, inner.index as usize - count);
 
-                inner.index = count;
+                inner.index = count as _;
 
                 // *elements_mut = remaining;
 
@@ -265,7 +260,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
             } else {
                 // Note: We might want to truncate the remaining
                 // elements of the vector.
-                count -= node.0.index;
+                count -= node.0.index();
                 nodes.push(node);
             }
         }
@@ -293,14 +288,14 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         }
 
         for mut node in self.clone().into_node_iter() {
-            if len < node.0.index {
+            if len < node.0.index() {
                 let inner = P::make_mut(&mut node.0);
                 // this is the new tail, point to the end
                 // inner.next = None;
-                inner.index -= len;
+                inner.index -= len as u32;
                 return Some(node);
             } else {
-                len -= node.0.index;
+                len -= node.0.index();
             }
         }
 
@@ -323,17 +318,17 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         // has been moved to the right but the underlying data has not
         // yet been truncated, we should attempt to eagerly do so, otherwise
         // we should fall back to the existing implementation.
-        if self.0.index < self.elements().len() {
+        if self.0.index() < self.elements().len() {
             // P::make_mut(&mut P::make_mut(&mut self.0).elements).truncate(index);
             let cell = P::make_mut(&mut self.0);
-            truncate(&mut cell.elements, index);
+            truncate(&mut cell.elements, index as _);
         }
 
         // TODO cdr here is an issue - only moves the offset, no way to know that its full
         // Cause its not actually full
-        if self.elements().len() > self.size() - 1 {
+        if self.elements().len() > self.size() as usize - 1 {
             // Always initialize a vec with half the capacity of the previous one
-            let mut vec = Vector::with_capacity(self.size() / 2);
+            let mut vec = Vector::with_capacity(self.size() as usize / 2);
             vec.push(value);
 
             // Make dummy node
@@ -375,8 +370,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     }
 
     fn slow_path_new_node(&mut self, value: T) {
-        if self.elements().len() > self.size() / 2 {
-            let mut vec = Vector::with_capacity(N);
+        if self.elements().len() > self.size() as usize / 2 {
+            let mut vec = Vector::with_capacity(N as _);
             vec.push(value);
 
             let mut default = UnrolledList(P::new(UnrolledCell {
@@ -468,13 +463,13 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         &self.0.elements
     }
 
-    fn size(&self) -> usize {
+    fn size(&self) -> u32 {
         self.0.size
     }
 
     #[cfg(test)]
     fn does_node_satisfy_invariant(&self) -> bool {
-        self.elements().len() <= self.size()
+        self.elements().len() <= self.size() as usize
     }
 
     #[cfg(test)]
@@ -507,7 +502,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     // Consuming iterators
     pub fn iter(&self) -> impl Iterator<Item = &'_ T> {
         self.node_iter()
-            .flat_map(|x| x.elements()[0..x.index()].iter().rev())
+            .flat_map(|x| x.elements()[0..x.index() as usize].iter().rev())
     }
 
     // Every node must have either CAPACITY elements, or be marked as full
@@ -518,19 +513,19 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
     }
 
     pub fn get(&self, mut index: usize) -> Option<&T> {
-        if index < self.0.index {
-            self.0.elements.get(self.0.index - index - 1)
+        if index < self.0.index() {
+            self.0.elements.get(self.0.index() - index - 1)
         } else {
             let mut cur = self.0.next.as_ref();
-            index -= self.0.index;
+            index -= self.0.index();
 
             while let Some(node) = cur {
-                if index < node.0.index {
+                if index < node.0.index() {
                     let node_cap = node.0.index;
-                    return node.0.elements.get(node_cap - index - 1);
+                    return node.0.elements.get(node_cap as usize - index - 1);
                 } else {
                     cur = node.0.next.as_ref();
-                    index -= node.0.index;
+                    index -= node.0.index();
                 }
             }
 
@@ -590,13 +585,13 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledList<T,
         self.0.elements.is_empty() || self.0.index == 0
     }
 
-    pub fn index(&self) -> usize {
+    pub fn index(&self) -> u32 {
         self.0.index
     }
 }
 
 // Don't blow the stack
-impl<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> Drop
+impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Drop
     for UnrolledCell<T, P, N, G>
 {
     fn drop(&mut self) {
@@ -614,20 +609,14 @@ impl<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> Drop
 }
 
 #[repr(C)]
-pub struct UnrolledCell<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
-    index: usize,
-    // Can this be repr C as well? That way we can do
-    // cons / cdr without necessarily doing actual calls?
-    // pub(crate) elements: P::Pointer<Vec<T>>,
+pub struct UnrolledCell<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> {
+    index: u32,
     pub(crate) elements: AtomicSharedVector<T>,
-
     pub(crate) next: Option<UnrolledList<T, P, N, G>>,
-    size: usize,
+    size: u32,
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Clone
-    for UnrolledCell<T, P, N, G>
-{
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Clone for UnrolledCell<T, P, N, G> {
     fn clone(&self) -> Self {
         Self {
             index: self.index,
@@ -638,7 +627,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Clone
     }
 }
 
-impl<T: Clone + std::fmt::Debug, P: PointerFamily, const N: usize, const G: usize> std::fmt::Debug
+impl<T: Clone + std::fmt::Debug, P: PointerFamily, const N: u32, const G: u32> std::fmt::Debug
     for UnrolledList<T, P, N, G>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -646,8 +635,8 @@ impl<T: Clone + std::fmt::Debug, P: PointerFamily, const N: usize, const G: usiz
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T, P, N, G> {
-    const GROWTH_RATE: usize = if G == 0 { 1 } else { G };
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, N, G> {
+    const GROWTH_RATE: u32 = if G == 0 { 1 } else { G };
 
     fn new() -> Self {
         UnrolledCell {
@@ -658,10 +647,14 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
         }
     }
 
+    fn index(&self) -> usize {
+        self.index as _
+    }
+
     fn new_with_capacity() -> Self {
         UnrolledCell {
             index: 0,
-            elements: AtomicSharedVector::with_capacity(N),
+            elements: AtomicSharedVector::with_capacity(N as _),
             next: None,
             size: N,
         }
@@ -672,7 +665,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
         if self.index == 0 {
             return None;
         }
-        self.elements.get(self.index - 1)
+        self.elements.get(self.index as usize - 1)
     }
 
     // This _does_ create a boxed representation of the next item. Its possible we don't actually
@@ -707,7 +700,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
     fn cons(value: T, mut cdr: UnrolledList<T, P, N, G>) -> UnrolledList<T, P, N, G> {
         let size = cdr.size();
 
-        if cdr.elements().len() > size - 1 {
+        if cdr.elements().len() > size as usize - 1 {
             UnrolledList(P::new(UnrolledCell {
                 index: 1,
                 // elements: P::new(vec![value]),
@@ -728,7 +721,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> UnrolledCell<T,
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Extend<T>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Extend<T>
     for UnrolledList<T, P, N, G>
 {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
@@ -736,17 +729,13 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Extend<T>
     }
 }
 
-pub(crate) struct DrainingNodeIter<
-    T: Clone + 'static,
-    P: PointerFamily,
-    const N: usize,
-    const G: usize,
-> {
+pub(crate) struct DrainingNodeIter<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32>
+{
     cur: Option<UnrolledList<T, P, N, G>>,
     _inner: PhantomData<T>,
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Iterator
     for DrainingNodeIter<T, P, N, G>
 {
     type Item = UnrolledList<T, P, N, G>;
@@ -807,12 +796,12 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
     }
 }
 
-pub(crate) struct NodeIter<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
+pub(crate) struct NodeIter<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> {
     cur: Option<UnrolledList<T, P, N, G>>,
     _inner: PhantomData<T>,
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator for NodeIter<T, P, N, G> {
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Iterator for NodeIter<T, P, N, G> {
     type Item = UnrolledList<T, P, N, G>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(_self) = std::mem::take(&mut self.cur) {
@@ -824,18 +813,13 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator for No
     }
 }
 
-pub(crate) struct NodeIterRef<
-    'a,
-    T: Clone + 'static,
-    P: PointerFamily,
-    const N: usize,
-    const G: usize,
-> {
+pub(crate) struct NodeIterRef<'a, T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32>
+{
     cur: Option<&'a UnrolledList<T, P, N, G>>,
     _inner: PhantomData<T>,
 }
 
-impl<'a, T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> Iterator
+impl<'a, T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Iterator
     for NodeIterRef<'a, T, P, N, G>
 {
     type Item = &'a UnrolledList<T, P, N, G>;
@@ -853,11 +837,11 @@ impl<'a, T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> I
 pub struct DrainingConsumingWrapper<
     T: Clone + 'static,
     P: PointerFamily,
-    const N: usize,
-    const G: usize,
+    const N: u32,
+    const G: u32,
 >(DrainingConsumingIter<T, P, N, G>);
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Iterator
     for DrainingConsumingWrapper<T, P, N, G>
 {
     type Item = T;
@@ -882,11 +866,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
     }
 }
 
-pub struct ConsumingWrapper<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize>(
+pub struct ConsumingWrapper<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32>(
     ConsumingIter<T, P, N, G>,
 );
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Iterator
     for ConsumingWrapper<T, P, N, G>
 {
     type Item = T;
@@ -911,11 +895,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
     }
 }
 
-// struct OwnedNodeIterator<T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize> {
+// struct OwnedNodeIterator<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> {
 //     list: UnrolledCell<T, P, N, G>,
 // }
 
-// impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
+// impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Iterator
 //     for OwnedNodeIterator<T, P, N, G>
 // {
 //     type Item = T;
@@ -931,7 +915,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
 //     }
 // }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterator
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> IntoIterator
     for UnrolledList<T, P, N, G>
 {
     type Item = T;
@@ -969,7 +953,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterator
 
             let unique = v.into_unique();
 
-            unique.into_iter().take(x.index()).rev()
+            unique.into_iter().take(x.index() as _).rev()
 
             // cell.elements.into_unique()
 
@@ -986,11 +970,11 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterator
 }
 
 // TODO have this also expose TryFold
-pub struct IterWrapper<'a, T: Clone + 'static, P: PointerFamily, const N: usize, const G: usize>(
+pub struct IterWrapper<'a, T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32>(
     RefIter<'a, T, P, N, G>,
 );
 
-impl<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
+impl<'a, T: Clone, P: PointerFamily, const N: u32, const G: u32> Iterator
     for IterWrapper<'a, T, P, N, G>
 {
     type Item = &'a T;
@@ -1015,7 +999,7 @@ impl<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> Iterator
     }
 }
 
-impl<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterator
+impl<'a, T: Clone, P: PointerFamily, const N: u32, const G: u32> IntoIterator
     for &'a UnrolledList<T, P, N, G>
 {
     type Item = &'a T;
@@ -1025,12 +1009,12 @@ impl<'a, T: Clone, P: PointerFamily, const N: usize, const G: usize> IntoIterato
     fn into_iter(self) -> Self::IntoIter {
         IterWrapper(
             self.node_iter()
-                .flat_map(|x| x.elements()[0..x.index()].iter().rev()),
+                .flat_map(|x| x.elements()[0..x.index() as _].iter().rev()),
         )
     }
 }
 
-struct ExponentialChunks<I, const N: usize, const G: usize>
+struct ExponentialChunks<I, const N: u32, const G: u32>
 where
     I: Iterator,
 {
@@ -1040,7 +1024,7 @@ where
     running_sum: usize,
 }
 
-impl<I, const N: usize, const G: usize> ExponentialChunks<I, N, G>
+impl<I, const N: u32, const G: u32> ExponentialChunks<I, N, G>
 where
     I: Iterator,
 {
@@ -1048,7 +1032,7 @@ where
         let mut running_sum = size;
 
         while running_sum < length {
-            size *= G;
+            size *= G as usize;
             running_sum += size;
         }
 
@@ -1061,7 +1045,7 @@ where
     }
 }
 
-impl<I, const N: usize, const G: usize> Iterator for ExponentialChunks<I, N, G>
+impl<I, const N: u32, const G: u32> Iterator for ExponentialChunks<I, N, G>
 where
     I: Iterator,
 {
@@ -1089,29 +1073,29 @@ where
         let result = chunk;
         let size = self.size;
 
-        self.size /= G;
+        self.size /= G as usize;
         self.length -= result.len();
 
         Some((size, result))
     }
 }
 
-fn from_vec<T: Clone, P: PointerFamily, const N: usize, const G: usize>(
+fn from_vec<T: Clone, P: PointerFamily, const N: u32, const G: u32>(
     vec: Vec<T>,
 ) -> UnrolledList<T, P, N, G> {
     let length = vec.len();
 
     let mut pairs: SmallVec<[UnrolledList<_, _, N, G>; 16]> =
-        ExponentialChunks::<_, N, G>::new(vec.into_iter(), length, N)
+        ExponentialChunks::<_, N, G>::new(vec.into_iter(), length, N as usize)
             .map(|(size, x)| {
                 let mut elements = x;
                 elements.reverse();
 
                 UnrolledList(P::new(UnrolledCell {
-                    index: elements.len(),
+                    index: elements.len() as u32,
                     elements: elements.into_shared_atomic(),
                     next: None,
-                    size,
+                    size: size as u32,
                 }))
             })
             .collect();
@@ -1136,7 +1120,7 @@ fn from_vec<T: Clone, P: PointerFamily, const N: usize, const G: usize>(
 
 // and we'll implement FromIterator
 // TODO specialize this for the into version?
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> FromIterator<T>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> FromIterator<T>
     for UnrolledList<T, P, N, G>
 {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
@@ -1145,8 +1129,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> FromIterator<T>
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
-    FromIterator<UnrolledList<T, P, N, G>> for UnrolledList<T, P, N, G>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> FromIterator<UnrolledList<T, P, N, G>>
+    for UnrolledList<T, P, N, G>
 {
     fn from_iter<I: IntoIterator<Item = UnrolledList<T, P, N, G>>>(iter: I) -> Self {
         // Links up the nodes
@@ -1161,7 +1145,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
 
             if let Some(UnrolledList(cell)) = nodes.get_mut(i) {
                 // Check if this node can fit entirely into the previous one
-                if cell.elements.len() + prev.0.elements.len() <= prev.0.size {
+                if cell.elements.len() + prev.0.elements.len() <= prev.0.size as usize {
                     let left_inner = P::make_mut(cell);
                     let right_inner = P::make_mut(&mut prev.0);
 
@@ -1169,17 +1153,17 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
                     // let right_vector = P::make_mut(&mut right_inner.elements);
 
                     // Drop the useless elements
-                    if left_inner.index < left_inner.elements.len() {
+                    if left_inner.index() < left_inner.elements.len() {
                         // left_vector.truncate(left_inner.index);
 
-                        truncate(&mut left_inner.elements, left_inner.index);
+                        truncate(&mut left_inner.elements, left_inner.index as _);
                     }
 
                     // TODO
-                    if right_inner.index < right_inner.elements.len() {
+                    if right_inner.index() < right_inner.elements.len() {
                         // right_vector.truncate(right_inner.index);
 
-                        truncate(&mut right_inner.elements, right_inner.index);
+                        truncate(&mut right_inner.elements, right_inner.index as _);
                     }
 
                     // Perform the actual move of the values
@@ -1191,7 +1175,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
                     std::mem::swap(&mut left_inner.elements, &mut right_inner.elements);
 
                     // Adjust the indices accordingly
-                    left_inner.index = left_inner.elements.len();
+                    left_inner.index = left_inner.elements.len() as u32;
                     right_inner.index = 0;
 
                     // Update this node to now point to the right nodes tail
@@ -1208,7 +1192,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize>
     }
 }
 
-impl<'a, T: 'a + Clone, P: 'a + PointerFamily, const N: usize, const G: usize>
+impl<'a, T: 'a + Clone, P: 'a + PointerFamily, const N: u32, const G: u32>
     FromIterator<&'a UnrolledList<T, P, N, G>> for UnrolledList<T, P, N, G>
 {
     fn from_iter<I: IntoIterator<Item = &'a UnrolledList<T, P, N, G>>>(iter: I) -> Self {
@@ -1216,7 +1200,7 @@ impl<'a, T: 'a + Clone, P: 'a + PointerFamily, const N: usize, const G: usize>
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> From<Vec<T>>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> From<Vec<T>>
     for UnrolledList<T, P, N, G>
 {
     fn from(vec: Vec<T>) -> Self {
@@ -1224,7 +1208,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> From<Vec<T>>
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize> From<&[T]>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> From<&[T]>
     for UnrolledList<T, P, N, G>
 {
     fn from(vec: &[T]) -> Self {
