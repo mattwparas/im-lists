@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod proptests;
 
-use shared_vector::{AtomicSharedVector, Vector};
+use crate::shared_vector::{AtomicSharedVector, Vector};
 use smallvec::SmallVec;
 
 use crate::shared::PointerFamily;
@@ -17,7 +17,8 @@ type ConsumingIter<T, P, const N: u32, const G: u32> = FlatMap<
     fn(UnrolledList<T, P, N, G>) -> MaybeCloned<T, N, G>, // Rev<std::iter::Take<std::vec::IntoIter<T>>>,
 >;
 
-type MaybeCloned<T, const N: u32, const G: u32> = Rev<std::iter::Take<shared_vector::IntoIter<T>>>;
+type MaybeCloned<T, const N: u32, const G: u32> =
+    Rev<std::iter::Take<crate::shared_vector::IntoIter<T>>>;
 
 type RefIter<'a, T, P, const N: u32, const G: u32> = FlatMap<
     NodeIterRef<'a, T, P, N, G>,
@@ -28,9 +29,9 @@ type RefIter<'a, T, P, const N: u32, const G: u32> = FlatMap<
 type DrainingConsumingIter<T, P, const N: u32, const G: u32> = FlatMap<
     DrainingNodeIter<T, P, N, G>,
     // Rev<std::iter::Take<std::vec::IntoIter<T>>>,
-    Rev<std::iter::Take<shared_vector::IntoIter<T>>>,
+    Rev<std::iter::Take<crate::shared_vector::IntoIter<T>>>,
     // fn(UnrolledList<T, P, N, G>) -> Rev<std::iter::Take<std::vec::IntoIter<T>>>,
-    fn(UnrolledList<T, P, N, G>) -> Rev<std::iter::Take<shared_vector::IntoIter<T>>>,
+    fn(UnrolledList<T, P, N, G>) -> Rev<std::iter::Take<crate::shared_vector::IntoIter<T>>>,
 >;
 
 fn empty_list<T: Clone, P: PointerFamily, const N: u32, const G: u32>(
@@ -704,7 +705,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
             UnrolledList(P::new(UnrolledCell {
                 index: 1,
                 // elements: P::new(vec![value]),
-                elements: shared_vector::arc_vector![value],
+                elements: crate::arc_vector![value],
                 next: Some(cdr),
                 size: size * Self::GROWTH_RATE,
             }))

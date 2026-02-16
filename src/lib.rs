@@ -3,6 +3,7 @@
 pub mod handler;
 pub mod list;
 pub mod shared;
+mod shared_vector;
 pub(crate) mod unrolled;
 
 /// Construct a [`List`](crate::list::List) from a sequence of elements
