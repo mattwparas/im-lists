@@ -58,8 +58,8 @@ use crate::{
 pub struct GenericList<
     T: Clone + 'static,
     P: PointerFamily = RcPointer,
-    const N: usize = 256,
-    const G: usize = 1,
+    const N: u32 = 256,
+    const G: u32 = 1,
     D: DropHandler<Self> = DefaultDropHandler,
 >(UnrolledList<T, P, N, G>, PhantomData<D>);
 
@@ -74,12 +74,12 @@ pub type VList<T> = GenericList<T, RcPointer, 2, 2>;
 pub struct RawCell<
     T: Clone + 'static,
     P: PointerFamily,
-    const N: usize,
-    const G: usize,
+    const N: u32,
+    const G: u32,
     D: DropHandler<GenericList<T, P, N, G, D>>,
 >(*const UnrolledCell<T, P, N, G>, PhantomData<D>);
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> Clone
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> Clone
     for GenericList<T, P, N, G, D>
 {
     fn clone(&self) -> Self {
@@ -87,7 +87,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>>
     GenericList<T, P, N, G, D>
 {
     /// Construct an empty list.
@@ -114,7 +114,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
 
     #[doc(hidden)]
     pub fn index(&self) -> usize {
-        self.0.index()
+        self.0.index() as _
     }
 
     #[doc(hidden)]
@@ -145,12 +145,12 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     #[doc(hidden)]
     pub fn elements_as_ptr_usize(&self) -> usize {
         // Overflow is fine - this should give us a unique value?
-        self.0.elements_as_ptr_usize() + self.0.index()
+        self.0.elements_as_ptr_usize() + self.0.index() as usize
     }
 
     #[doc(hidden)]
     pub fn identity_tuple(&self) -> (usize, usize) {
-        (self.0.elements_as_ptr_usize(), self.0.index())
+        (self.0.elements_as_ptr_usize(), self.0.index() as _)
     }
 
     // Check the next pointer. If the next pointer is the same,
@@ -593,7 +593,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> Default
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> Default
     for GenericList<T, P, N, G, D>
 {
     fn default() -> Self {
@@ -601,7 +601,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> Extend<T>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> Extend<T>
     for GenericList<T, P, N, G, D>
 {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
@@ -610,15 +610,15 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
 }
 
 // and we'll implement FromIterator
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>>
-    FromIterator<T> for GenericList<T, P, N, G, D>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> FromIterator<T>
+    for GenericList<T, P, N, G, D>
 {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         GenericList(iter.into_iter().collect(), PhantomData)
     }
 }
 
-impl<'a, T: 'a + Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>>
+impl<'a, T: 'a + Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>>
     FromIterator<&'a T> for GenericList<T, P, N, G, D>
 {
     fn from_iter<I: IntoIterator<Item = &'a T>>(iter: I) -> Self {
@@ -626,7 +626,7 @@ impl<'a, T: 'a + Clone, P: PointerFamily, const N: usize, const G: usize, D: Dro
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>>
     FromIterator<GenericList<T, P, N, G, D>> for GenericList<T, P, N, G, D>
 {
     fn from_iter<I: IntoIterator<Item = GenericList<T, P, N, G, D>>>(iter: I) -> Self {
@@ -639,7 +639,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> From<Vec<T>>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> From<Vec<T>>
     for GenericList<T, P, N, G, D>
 {
     fn from(vec: Vec<T>) -> Self {
@@ -650,8 +650,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
 impl<
         T: Clone + std::fmt::Debug,
         P: PointerFamily,
-        const N: usize,
-        const G: usize,
+        const N: u32,
+        const G: u32,
         D: DropHandler<Self>,
     > std::fmt::Debug for GenericList<T, P, N, G, D>
 {
@@ -665,8 +665,8 @@ pub struct Iter<
     'a,
     T: Clone + 'static,
     P: PointerFamily,
-    const N: usize,
-    const G: usize,
+    const N: u32,
+    const G: u32,
     D: DropHandler<GenericList<T, P, N, G, D>>,
 >(IterWrapper<'a, T, P, N, G>, PhantomData<D>);
 
@@ -674,8 +674,8 @@ impl<
         'a,
         T: Clone + 'static,
         P: PointerFamily,
-        const N: usize,
-        const G: usize,
+        const N: u32,
+        const G: u32,
         D: DropHandler<GenericList<T, P, N, G, D>>,
     > Iterator for Iter<'a, T, P, N, G, D>
 {
@@ -705,8 +705,8 @@ impl<
         'a,
         T: Clone,
         P: PointerFamily,
-        const N: usize,
-        const G: usize,
+        const N: u32,
+        const G: u32,
         D: DropHandler<GenericList<T, P, N, G, D>>,
     > IntoIterator for &'a GenericList<T, P, N, G, D>
 {
@@ -723,16 +723,16 @@ impl<
 pub struct ConsumingIter<
     T: Clone + 'static,
     P: PointerFamily,
-    const N: usize,
-    const G: usize,
+    const N: u32,
+    const G: u32,
     D: DropHandler<GenericList<T, P, N, G, D>>,
 >(ConsumingWrapper<T, P, N, G>, PhantomData<D>);
 
 impl<
         T: Clone,
         P: PointerFamily,
-        const N: usize,
-        const G: usize,
+        const N: u32,
+        const G: u32,
         D: DropHandler<GenericList<T, P, N, G, D>>,
     > Iterator for ConsumingIter<T, P, N, G, D>
 {
@@ -758,7 +758,7 @@ impl<
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> IntoIterator
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> IntoIterator
     for GenericList<T, P, N, G, D>
 {
     type Item = T;
@@ -774,8 +774,8 @@ impl<
         'a,
         T: 'a + Clone,
         P: 'a + PointerFamily,
-        const N: usize,
-        const G: usize,
+        const N: u32,
+        const G: u32,
         D: 'a + DropHandler<Self>,
     > FromIterator<&'a GenericList<T, P, N, G, D>> for GenericList<T, P, N, G, D>
 {
@@ -784,7 +784,7 @@ impl<
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> From<&[T]>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> From<&[T]>
     for GenericList<T, P, N, G, D>
 {
     fn from(vec: &[T]) -> Self {
@@ -792,38 +792,28 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 }
 
-impl<
-        T: Clone + PartialEq,
-        P: PointerFamily,
-        const N: usize,
-        const G: usize,
-        D: DropHandler<Self>,
-    > PartialEq for GenericList<T, P, N, G, D>
+impl<T: Clone + PartialEq, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>>
+    PartialEq for GenericList<T, P, N, G, D>
 {
     fn eq(&self, other: &Self) -> bool {
         self.iter().eq(other.iter())
     }
 }
 
-impl<T: Clone + Eq, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> Eq
+impl<T: Clone + Eq, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> Eq
     for GenericList<T, P, N, G, D>
 {
 }
 
-impl<
-        T: Clone + PartialOrd,
-        P: PointerFamily,
-        const N: usize,
-        const G: usize,
-        D: DropHandler<Self>,
-    > PartialOrd for GenericList<T, P, N, G, D>
+impl<T: Clone + PartialOrd, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>>
+    PartialOrd for GenericList<T, P, N, G, D>
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.iter().partial_cmp(other.iter())
     }
 }
 
-impl<T: Clone + Ord, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> Ord
+impl<T: Clone + Ord, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> Ord
     for GenericList<T, P, N, G, D>
 {
     fn cmp(&self, other: &Self) -> Ordering {
@@ -831,7 +821,7 @@ impl<T: Clone + Ord, P: PointerFamily, const N: usize, const G: usize, D: DropHa
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> std::ops::Add
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> std::ops::Add
     for GenericList<T, P, N, G, D>
 {
     type Output = GenericList<T, P, N, G, D>;
@@ -845,8 +835,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
 impl<
         T: Clone,
         P: PointerFamily,
-        const N: usize,
-        const G: usize,
+        const N: u32,
+        const G: u32,
         D: DropHandler<GenericList<T, P, N, G, D>>,
     > std::ops::Add for &GenericList<T, P, N, G, D>
 {
@@ -858,8 +848,8 @@ impl<
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>>
-    std::iter::Sum for GenericList<T, P, N, G, D>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> std::iter::Sum
+    for GenericList<T, P, N, G, D>
 {
     fn sum<I>(it: I) -> Self
     where
@@ -872,8 +862,8 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
 impl<
         T: Clone + std::hash::Hash,
         P: PointerFamily,
-        const N: usize,
-        const G: usize,
+        const N: u32,
+        const G: u32,
         D: DropHandler<Self>,
     > std::hash::Hash for GenericList<T, P, N, G, D>
 {
@@ -884,7 +874,7 @@ impl<
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>>
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>>
     std::ops::Index<usize> for GenericList<T, P, N, G, D>
 {
     type Output = T;
@@ -904,7 +894,7 @@ impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: usize, const G: usize, D: DropHandler<Self>> Drop
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> Drop
     for GenericList<T, P, N, G, D>
 {
     fn drop(&mut self) {
