@@ -12,6 +12,9 @@ pub struct IntoIter<T, A: Allocator = Global> {
     pub(crate) allocator: A,
 }
 
+unsafe impl<T: Send> Send for IntoIter<T> {}
+unsafe impl<T: Sync> Sync for IntoIter<T> {}
+
 impl<T, A: Allocator> Iterator for IntoIter<T, A> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
