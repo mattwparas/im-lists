@@ -60,7 +60,9 @@ impl<T> Iterator for Drain<'_, T> {
 
     #[inline]
     fn next(&mut self) -> Option<T> {
-        self.iter.next().map(|elt| unsafe { ptr::read(elt as *const _) })
+        self.iter
+            .next()
+            .map(|elt| unsafe { ptr::read(elt as *const _) })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -71,7 +73,9 @@ impl<T> Iterator for Drain<'_, T> {
 impl<T> DoubleEndedIterator for Drain<'_, T> {
     #[inline]
     fn next_back(&mut self) -> Option<T> {
-        self.iter.next_back().map(|elt| unsafe { ptr::read(elt as *const _) })
+        self.iter
+            .next_back()
+            .map(|elt| unsafe { ptr::read(elt as *const _) })
     }
 }
 
@@ -149,4 +153,3 @@ fn sub_ptr<T>(a: *const T, b: *const T) -> usize {
 }
 
 impl<T> FusedIterator for Drain<'_, T> {}
-

@@ -312,7 +312,7 @@ pub unsafe fn header_from_data_ptr<H, T>(data_ptr: NonNull<T>) -> NonNull<H> {
 
 #[test]
 fn buffer_layout_alignemnt() {
-    pub use crate::alloc::Global;
+    use allocator_api2::alloc::Global;
 
     type B = Box<u32>;
     let layout = buffer_layout::<Header<DefaultRefCount, Global>, B>(2).unwrap();

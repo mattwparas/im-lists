@@ -146,7 +146,7 @@ mod tests {
             fn drop(&mut self) {}
         }
 
-        let mut vector = crate::Vector::new();
+        let mut vector = crate::shared_vector::Vector::new();
 
         for i in 0..=100 {
             vector.push(Foo::new(i));
@@ -181,7 +181,7 @@ mod tests {
             }
         }
 
-        let mut vector = crate::Vector::new();
+        let mut vector = crate::shared_vector::Vector::new();
 
         for i in 0..=100 {
             vector.push(Foo::new(i));
@@ -211,7 +211,7 @@ mod tests {
             }
         }
 
-        let mut vector = crate::Vector::new();
+        let mut vector = crate::shared_vector::Vector::new();
 
         for _ in 0..=100 {
             vector.push(Foo::new());
