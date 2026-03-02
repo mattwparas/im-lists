@@ -1227,8 +1227,8 @@ fn split_off<T: Clone>(value: &mut AtomicSharedVector<T>, index: usize) -> Atomi
     let capacity = value.len() - index;
     let mut new = Vector::with_capacity(index);
     for i in index..value.len() {
-        let foo = value.get_mut(i).unwrap();
-        new.push(unsafe { std::ptr::read(foo) })
+        let value = value.get_mut(i).unwrap();
+        new.push(unsafe { std::ptr::read(value) })
     }
     for _ in 0..capacity {
         std::mem::forget(value.pop());
