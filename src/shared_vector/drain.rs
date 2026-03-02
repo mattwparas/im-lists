@@ -10,7 +10,7 @@ use super::RawVector;
 
 /// A draining iterator for `Vector<T>`.
 ///
-/// This `struct` is created by [`Vector::drain`].
+/// This `struct` is created by [`crate::shared_vector::Vector::drain`].
 /// See its documentation for more.
 pub struct Drain<'a, T: 'a> {
     /// Index of tail to preserve
