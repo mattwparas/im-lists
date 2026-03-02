@@ -103,7 +103,7 @@ jobs:
   publish-dry-run:
     name: Publish dry run
     runs-on: ubuntu-latest
-    needs: [docs, clippy]
+    needs: [docs]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
