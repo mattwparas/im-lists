@@ -87,8 +87,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Default for Unrolle
 
 impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, N, G> {
     pub fn new() -> Self {
-        // UnrolledList(P::new(UnrolledCell::new()))
-
         UnrolledList(empty_list::<T, P, N, G>())
     }
 
@@ -313,84 +311,90 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     }
 
     pub fn cons_mut(&mut self, value: T) {
-        let index = self.0.index;
+        let index = self.0.index as usize;
+        let mut elements_len = self.elements().len();
+        let size = self.size();
 
         // This is saying: If we are pointing to a cell where the offset
         // has been moved to the right but the underlying data has not
         // yet been truncated, we should attempt to eagerly do so, otherwise
         // we should fall back to the existing implementation.
-        if self.0.index() < self.elements().len() {
+        // if self.0.index() < self.elements().len() {
+        //     let cell = P::make_mut(&mut self.0);
+        //     truncate(&mut cell.elements, index as _);
+        //     elements_len = index
+        // }
+
+        let already_unique: Option<&mut UnrolledCell<T, P, N, G>> = if index < elements_len {
             let cell = P::make_mut(&mut self.0);
-            truncate(&mut cell.elements, index as _);
-        }
+            truncate(&mut cell.elements, index);
+            elements_len = index;
+            Some(cell)
+        } else {
+            None
+        };
 
         // TODO cdr here is an issue - only moves the offset, no way to know that its full
         // Cause its not actually full
-        if self.elements().len() > self.size() as usize - 1 {
+        if elements_len > size as usize - 1 {
             // Always initialize a vec with half the capacity of the previous one
-            let mut vec = Vector::with_capacity(self.size() as usize / 2);
+            let mut vec = Vector::with_capacity(self.size() as usize / 4);
             vec.push(value);
 
             let size = self.size();
 
-            // Make dummy node
-            // return reference to this new node
-            let mut default = UnrolledList(P::new(UnrolledCell {
+            let old_self = std::mem::replace(self, UnrolledList::new());
+
+            *self = UnrolledList(P::new(UnrolledCell {
                 index: 1,
                 elements: vec.into_shared_atomic(),
-                next: Some(self.clone()),
+                next: Some(old_self),
                 size: size * UnrolledCell::<T, P, N, G>::GROWTH_RATE,
             }));
-
-            std::mem::swap(self, &mut default);
-
-            // let mut default_node = UnrolledCell {
-            //     index: 1,
-            //     elements: vec.into_shared_atomic(),
-            //     // next: Some(self.clone()),
-            //     next: None,
-            //     size: size * UnrolledCell::<T, P, N, G>::GROWTH_RATE,
-            // };
-            // std::mem::swap(self);
         } else {
-            match P::get_mut(&mut self.0) {
-                Some(inner) => {
-                    match inner.elements.try_push(value) {
+            // If we can, save the value. We can shrink this down a bit
+            if let Some(inner) = already_unique {
+                match inner.elements.try_push(value) {
+                    Ok(_) => {
+                        inner.index += 1;
+                    }
+                    Err(v) => {
+                        self.slow_path_new_node(v);
+                    }
+                }
+            } else {
+                match P::get_mut(&mut self.0) {
+                    Some(inner) => match inner.elements.try_push(value) {
                         Ok(_) => {
                             inner.index += 1;
                         }
                         Err(v) => {
                             self.slow_path_new_node(v);
                         }
+                    },
+                    None => {
+                        self.slow_path_new_node(value);
                     }
-
-                    // if inner.elements.is_unique() {
-                    //     inner.elements.push(value);
-                    //     inner.index += 1;
-                    // } else {
-                    //     self.slow_path_new_node(value);
-                    // }
-                }
-                None => {
-                    self.slow_path_new_node(value);
                 }
             }
         }
     }
 
     fn slow_path_new_node(&mut self, value: T) {
-        if self.elements().len() > self.size() as usize / 2 {
+        if self.elements().len() > self.size() as usize / 4 {
             let mut vec = Vector::with_capacity(N as _);
             vec.push(value);
 
-            let mut default = UnrolledList(P::new(UnrolledCell {
+            let size = self.size();
+
+            let old_self = std::mem::replace(self, UnrolledList::new());
+
+            *self = UnrolledList(P::new(UnrolledCell {
                 index: 1,
                 elements: vec.into_shared_atomic(),
-                next: Some(self.clone()),
-                size: N,
+                next: Some(old_self),
+                size: size * UnrolledCell::<T, P, N, G>::GROWTH_RATE,
             }));
-
-            std::mem::swap(self, &mut default);
         } else {
             let inner = P::make_mut(&mut self.0);
             inner.cons_mut(value);
