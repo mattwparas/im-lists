@@ -283,6 +283,21 @@ impl<T: Clone, R: RefCount, A: Allocator + Clone> RefCountedVector<T, R, A> {
         }
     }
 
+    pub fn try_push(&mut self, val: T) -> Result<(), T> {
+        let is_unique = self.is_unique();
+        if !is_unique {
+            return Err(val);
+        }
+
+        unsafe { self.unique_reserve(1, is_unique) };
+
+        unsafe {
+            raw::push_assuming_capacity(self.data_ptr(), &mut self.vec_header_mut(), val);
+        }
+
+        Ok(())
+    }
+
     /// Removes the last element from the vector and returns it, or `None` if it is empty.
     pub fn pop(&mut self) -> Option<T> {
         self.ensure_unique();
@@ -443,6 +458,17 @@ impl<T: Clone, R: RefCount, A: Allocator + Clone> RefCountedVector<T, R, A> {
     #[inline]
     pub fn reserve(&mut self, additional: usize) {
         let is_unique = self.is_unique();
+        let enough_capacity = self.remaining_capacity() >= additional;
+
+        if !is_unique || !enough_capacity {
+            // Hopefully the least common case.
+            self.try_realloc_additional(is_unique, enough_capacity, additional)
+                .unwrap();
+        }
+    }
+
+    #[inline]
+    pub unsafe fn unique_reserve(&mut self, additional: usize, is_unique: bool) {
         let enough_capacity = self.remaining_capacity() >= additional;
 
         if !is_unique || !enough_capacity {

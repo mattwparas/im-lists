@@ -320,7 +320,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
         // yet been truncated, we should attempt to eagerly do so, otherwise
         // we should fall back to the existing implementation.
         if self.0.index() < self.elements().len() {
-            // P::make_mut(&mut P::make_mut(&mut self.0).elements).truncate(index);
             let cell = P::make_mut(&mut self.0);
             truncate(&mut cell.elements, index as _);
         }
@@ -332,35 +331,44 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
             let mut vec = Vector::with_capacity(self.size() as usize / 2);
             vec.push(value);
 
+            let size = self.size();
+
             // Make dummy node
             // return reference to this new node
             let mut default = UnrolledList(P::new(UnrolledCell {
                 index: 1,
                 elements: vec.into_shared_atomic(),
                 next: Some(self.clone()),
-                size: self.size() * UnrolledCell::<T, P, N, G>::GROWTH_RATE,
+                size: size * UnrolledCell::<T, P, N, G>::GROWTH_RATE,
             }));
 
             std::mem::swap(self, &mut default);
+
+            // let mut default_node = UnrolledCell {
+            //     index: 1,
+            //     elements: vec.into_shared_atomic(),
+            //     // next: Some(self.clone()),
+            //     next: None,
+            //     size: size * UnrolledCell::<T, P, N, G>::GROWTH_RATE,
+            // };
+            // std::mem::swap(self);
         } else {
             match P::get_mut(&mut self.0) {
                 Some(inner) => {
-                    if inner.elements.is_unique() {
-                        inner.elements.push(value);
-                        inner.index += 1;
-                    } else {
-                        self.slow_path_new_node(value);
+                    match inner.elements.try_push(value) {
+                        Ok(_) => {
+                            inner.index += 1;
+                        }
+                        Err(v) => {
+                            self.slow_path_new_node(v);
+                        }
                     }
 
-                    // match P::get_mut(&mut inner.elements) {
-                    //     Some(reference) => {
-                    //         reference.push(value);
-                    //         inner.index += 1;
-                    //     }
-                    //     // Just check if its bigger than half, point to it.
-                    //     None => {
-                    //         self.slow_path_new_node(value);
-                    //     }
+                    // if inner.elements.is_unique() {
+                    //     inner.elements.push(value);
+                    //     inner.index += 1;
+                    // } else {
+                    //     self.slow_path_new_node(value);
                     // }
                 }
                 None => {
