@@ -319,12 +319,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
         // has been moved to the right but the underlying data has not
         // yet been truncated, we should attempt to eagerly do so, otherwise
         // we should fall back to the existing implementation.
-        // if self.0.index() < self.elements().len() {
-        //     let cell = P::make_mut(&mut self.0);
-        //     truncate(&mut cell.elements, index as _);
-        //     elements_len = index
-        // }
-
         let already_unique: Option<&mut UnrolledCell<T, P, N, G>> = if index < elements_len {
             let cell = P::make_mut(&mut self.0);
             truncate(&mut cell.elements, index);
@@ -624,9 +618,9 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Drop
 #[repr(C)]
 pub struct UnrolledCell<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> {
     index: u32,
+    size: u32,
     pub(crate) elements: AtomicSharedVector<T>,
     pub(crate) next: Option<UnrolledList<T, P, N, G>>,
-    size: u32,
 }
 
 impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Clone for UnrolledCell<T, P, N, G> {

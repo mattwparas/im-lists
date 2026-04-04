@@ -5,7 +5,7 @@ use core::sync::atomic::Ordering;
 use core::{mem, ptr};
 
 use crate::shared_vector::alloc::{AllocError, Allocator, Global};
-use crate::shared_vector::raw;
+use crate::shared_vector::raw::{self, header_size};
 use crate::shared_vector::raw::{BufferSize, HeaderBuffer};
 use crate::shared_vector::vector::{RawVector, Vector};
 use crate::shared_vector::{grow_amortized, AtomicRefCount, DefaultRefCount, RefCount};
@@ -71,6 +71,10 @@ impl<T, R: RefCount, A: Allocator> RefCountedVector<T, R, A> {
     /// Creates an empty vector without allocating memory.
     pub fn new_in(allocator: A) -> Self {
         Self::try_with_capacity_in(0, allocator).unwrap()
+    }
+
+    pub const fn header_size() -> usize {
+        header_size::<raw::Header<R, A>, T>()
     }
 
     /// Creates an empty pre-allocated vector with a given storage capacity.

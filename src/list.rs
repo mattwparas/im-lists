@@ -15,6 +15,7 @@ use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData};
 use crate::{
     handler::{DefaultDropHandler, DropHandler},
     shared::{ArcPointer, PointerFamily, RcPointer},
+    shared_vector::AtomicSharedVector,
     unrolled::{ConsumingWrapper, IterWrapper, UnrolledCell, UnrolledList},
 };
 
@@ -105,6 +106,10 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     /// Time: O(1)
     pub fn strong_count(&self) -> usize {
         self.0.strong_count()
+    }
+
+    pub const fn vector_header_size() -> usize {
+        AtomicSharedVector::<T>::header_size()
     }
 
     /// Compare this list to another for pointer equality
