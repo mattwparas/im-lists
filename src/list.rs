@@ -180,7 +180,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
         mut self,
         // default: UnrolledList<T, P, N, G>,
     ) -> Option<impl Iterator<Item = T>> {
-        Some(std::mem::take(&mut self.0).draining_iterator())
+        std::mem::take(&mut self.0).draining_iterator()
         // std::mem::replace(&mut self.0, default).draining_iterator()
         // todo!()
         // let x = MaybeUninit::new(self);
