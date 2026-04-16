@@ -130,29 +130,31 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
         self.0.elements.iter().take(self.index() as _).rev()
     }
 
-    pub fn draining_iterator(self) -> DrainingConsumingWrapper<T, P, N, G> {
-        DrainingConsumingWrapper(self.into_draining_node_iter().flat_map(|x| {
-            let index = x.index();
+    pub fn draining_iterator(self) -> Option<DrainingConsumingWrapper<T, P, N, G>> {
+        Some(DrainingConsumingWrapper(
+            self.into_draining_node_iter().flat_map(|x| {
+                let index = x.index();
 
-            P::try_unwrap(x.0)
-                .map(|mut cell| {
-                    if cell.elements.is_unique() {
-                        // Get the values inside
-                        std::mem::take(&mut cell.elements)
-                            .into_unique()
-                            .into_iter()
-                            .take(index as _)
-                            .rev()
-                    } else {
-                        Vector::new().into_iter().take(0).rev()
-                    }
+                P::try_unwrap(x.0)
+                    .map(|mut cell| {
+                        if cell.elements.is_unique() {
+                            // Get the values inside
+                            std::mem::take(&mut cell.elements)
+                                .into_unique()
+                                .into_iter()
+                                .take(index as _)
+                                .rev()
+                        } else {
+                            Vector::new().into_iter().take(0).rev()
+                        }
 
-                    // P::get_mut(&mut cell.elements)
-                    //     .map(|vec| std::mem::take(vec).into_iter().take(index).rev())
-                    //     .unwrap_or_else(|| Vec::new().into_iter().take(0).rev())
-                })
-                .unwrap_or_else(|| Vector::new().into_iter().take(0).rev())
-        }))
+                        // P::get_mut(&mut cell.elements)
+                        //     .map(|vec| std::mem::take(vec).into_iter().take(index).rev())
+                        //     .unwrap_or_else(|| Vec::new().into_iter().take(0).rev())
+                    })
+                    .unwrap_or_else(|| Vector::new().into_iter().take(0).rev())
+            }),
+        ))
     }
 
     // #[cfg(test)]
