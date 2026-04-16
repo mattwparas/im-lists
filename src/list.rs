@@ -179,8 +179,8 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     pub fn draining_iterator(
         mut self,
         // default: UnrolledList<T, P, N, G>,
-    ) -> impl Iterator<Item = T> {
-        std::mem::take(&mut self.0).draining_iterator()
+    ) -> Option<impl Iterator<Item = T>> {
+        Some(std::mem::take(&mut self.0).draining_iterator())
         // std::mem::replace(&mut self.0, default).draining_iterator()
         // todo!()
         // let x = MaybeUninit::new(self);
@@ -1635,7 +1635,7 @@ mod arc_tests {
     fn consuming_iter_with_no_references() {
         let list = vlist![0, 1, 2, 3, 4, 5, 6, 7, 8];
 
-        let result = list.draining_iterator().collect::<Vec<_>>();
+        let result = list.draining_iterator().unwrap().collect::<Vec<_>>();
 
         assert_eq!(vec![0, 1, 2, 3, 4, 5, 6, 7, 8], result);
     }
@@ -1645,7 +1645,7 @@ mod arc_tests {
         let list = vlist![0, 1, 2, 3, 4, 5, 6, 7, 8];
         let _second_list = list.cdr();
 
-        let result = list.draining_iterator().collect::<Vec<_>>();
+        let result = list.draining_iterator().unwrap().collect::<Vec<_>>();
 
         assert_eq!(Vec::<usize>::new(), result);
     }
