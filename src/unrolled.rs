@@ -509,8 +509,8 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     // Every node must have either CAPACITY elements, or be marked as full
     // Debateable whether I want them marked as full
     #[cfg(test)]
-    pub fn assert_invariants(&self) -> bool {
-        self.node_iter().all(Self::does_node_satisfy_invariant)
+    pub fn assert_invariants(&self) {
+        assert!(self.node_iter().all(Self::does_node_satisfy_invariant))
     }
 
     pub fn get(&self, mut index: usize) -> Option<&T> {
@@ -1175,6 +1175,9 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> FromIterator<Unroll
                     // Swap the locations now after we've done the update
                     std::mem::swap(&mut left_inner.elements, &mut right_inner.elements);
 
+                    // Update this node to use correct capacity
+                    std::mem::swap(&mut left_inner.size, &mut right_inner.size);
+
                     // Adjust the indices accordingly
                     left_inner.index = left_inner.elements.len() as u32;
                     right_inner.index = 0;
@@ -1291,6 +1294,7 @@ mod iterator_tests {
     const CAPACITY: usize = 256;
 
     type RcList<T> = UnrolledList<T, RcPointer, 256, 1>;
+    type SmallRcList<T> = UnrolledList<T, RcPointer, 4, 2>;
 
     #[test]
     fn check_size() {
@@ -1356,6 +1360,26 @@ mod iterator_tests {
         // 300 should be at 300
         assert_eq!(*left.get(300).unwrap(), 300);
         left.assert_list_invariants();
+    }
+
+    #[test]
+    fn empty_node_appending_coalescing_works() {
+        // 0/4: []
+        let left: SmallRcList<i32> = SmallRcList::new();
+
+        // 4/4: [2, 3, 4, 5]
+        // 2/8: [0, 1]
+        let right: SmallRcList<_> = (0..6).collect::<SmallRcList<_>>().reverse();
+
+        assert_eq!(right.node_iter().count(), 2);
+
+        // 6/8: [0, 1, 2, 3, 4, 5]
+        let left = left.append(right);
+
+        assert_eq!(left.node_iter().count(), 1);
+        assert!(!left.is_empty());
+        assert_eq!(*left.get(5).unwrap(), 0);
+        left.assert_invariants();
     }
 
     #[test]
