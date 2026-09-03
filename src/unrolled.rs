@@ -393,8 +393,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
 
         let old_self = std::mem::replace(self, UnrolledList::new());
 
-        // The empty list is a shared thread local singleton, so it always looks
-        // shared and would otherwise be linked on as a trailing empty node.
         let next = if old_self.is_empty() {
             None
         } else {
