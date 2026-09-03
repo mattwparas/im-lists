@@ -1680,3 +1680,106 @@ mod arc_tests {
         std::mem::forget(value);
     }
 }
+
+#[cfg(test)]
+mod vlist_shared_tests {
+    use crate::list::GenericList;
+    use crate::shared::RcPointer;
+
+    // Test using Steel's configuration
+    type V<T> = GenericList<T, RcPointer, 1, 2>;
+
+    #[test]
+    fn shared_cons_keeps_contents() {
+        let mut acc: V<usize> = V::new();
+        let mut keep: Vec<V<usize>> = Vec::new();
+
+        for i in 0..200 {
+            acc = V::cons(i, acc.clone());
+            // retain so that every later cons sees a shared node
+            keep.push(acc.clone());
+        }
+
+        assert_eq!(acc.iter().count(), 200, "iter count");
+        assert_eq!(acc.len(), 200, "len");
+
+        let collected: Vec<usize> = acc.iter().copied().collect();
+        let expected: Vec<usize> = (0..200).rev().collect();
+        assert_eq!(collected, expected, "contents");
+
+        for (n, snapshot) in keep.iter().enumerate() {
+            assert_eq!(snapshot.len(), n + 1, "retained prefix {n} len");
+            let got: Vec<usize> = snapshot.iter().copied().collect();
+            let want: Vec<usize> = (0..=n).rev().collect();
+            assert_eq!(got, want, "retained prefix {n} contents");
+        }
+
+        for i in 0..200 {
+            assert_eq!(acc.get(i), Some(&(199 - i)), "get({i})");
+        }
+    }
+
+    #[test]
+    fn shared_cons_other_operations() {
+        let mut acc: V<usize> = V::new();
+        let mut keep = Vec::new();
+        for i in 0..100 {
+            acc = V::cons(i, acc.clone());
+            keep.push(acc.clone());
+        }
+        let want: Vec<usize> = (0..100).rev().collect();
+
+        assert_eq!(
+            acc.clone().reverse().iter().copied().collect::<Vec<_>>(),
+            want.iter().rev().copied().collect::<Vec<_>>(),
+            "reverse"
+        );
+        assert_eq!(acc.last(), Some(&0), "last");
+        assert_eq!(
+            acc.take(5).iter().copied().collect::<Vec<_>>(),
+            want[..5].to_vec(),
+            "take"
+        );
+        assert_eq!(
+            acc.tail(5).unwrap().iter().copied().collect::<Vec<_>>(),
+            want[5..].to_vec(),
+            "tail"
+        );
+
+        let mut appended = acc.clone();
+        appended.append_mut(V::cons(1000, V::new()));
+        assert_eq!(appended.len(), 101, "append len");
+        assert_eq!(appended.last(), Some(&1000), "append last");
+
+        // every retained prefix still walks correctly after all of the above
+        for (n, snap) in keep.iter().enumerate() {
+            assert_eq!(snap.iter().count(), n + 1, "prefix {n} iter");
+            assert_eq!(snap.last(), Some(&0), "prefix {n} last");
+        }
+    }
+
+    #[test]
+    fn shared_cons_cdr_and_take() {
+        let mut acc: V<usize> = V::new();
+        let mut keep = Vec::new();
+        for i in 0..64 {
+            acc = V::cons(i, acc.clone());
+            keep.push(acc.clone());
+        }
+        let mut cur = acc.clone();
+        let mut seen = Vec::new();
+        while let Some(v) = cur.car() {
+            seen.push(v);
+            match cur.cdr() {
+                Some(next) => cur = next,
+                None => break,
+            }
+        }
+        assert_eq!(seen, (0..64).rev().collect::<Vec<_>>(), "cdr walk");
+        assert_eq!(
+            acc.take(10).iter().copied().collect::<Vec<_>>(),
+            (54..64).rev().collect::<Vec<_>>(),
+            "take(10)"
+        );
+    }
+}

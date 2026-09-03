@@ -377,24 +377,36 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     }
 
     fn slow_path_new_node(&mut self, value: T) {
-        if self.elements().len() > self.size() as usize / 4 {
-            let mut vec = Vector::with_capacity(N as _);
-            vec.push(value);
+        // Only grow if its actually larger enough
+        let filled = self.elements().len() > self.size() as usize / 4;
 
-            let size = self.size();
+        let mut vec = Vector::with_capacity(N as _);
+        vec.push(value);
 
-            let old_self = std::mem::replace(self, UnrolledList::new());
+        let size = self.size();
 
-            *self = UnrolledList(P::new(UnrolledCell {
-                index: 1,
-                elements: vec.into_shared_atomic(),
-                next: Some(old_self),
-                size: size * UnrolledCell::<T, P, N, G>::GROWTH_RATE,
-            }));
+        let size = if filled {
+            size.saturating_mul(UnrolledCell::<T, P, N, G>::GROWTH_RATE)
         } else {
-            let inner = P::make_mut(&mut self.0);
-            inner.cons_mut(value);
-        }
+            size
+        };
+
+        let old_self = std::mem::replace(self, UnrolledList::new());
+
+        // The empty list is a shared thread local singleton, so it always looks
+        // shared and would otherwise be linked on as a trailing empty node.
+        let next = if old_self.is_empty() {
+            None
+        } else {
+            Some(old_self)
+        };
+
+        *self = UnrolledList(P::new(UnrolledCell {
+            index: 1,
+            elements: vec.into_shared_atomic(),
+            next,
+            size,
+        }));
     }
 
     // Should be O(1) always
