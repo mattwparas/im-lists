@@ -17,9 +17,22 @@ pub mod alloc {
     pub use allocator_api2::alloc::{AllocError, Allocator, Global};
 }
 
+fn grow_floor() -> usize {
+    static V: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *V.get_or_init(|| {
+        std::env::var("IM_LISTS_GROW_FLOOR")
+            .ok()
+            .and_then(|x| x.parse().ok())
+            .filter(|x| *x > 0)
+            .unwrap_or(8)
+    })
+}
+
 pub(crate) fn grow_amortized(len: usize, additional: usize) -> usize {
     let required = len.saturating_add(additional);
-    let cap = len.saturating_add(len).max(required).max(8);
+    // The floor used to be 8. For a list whose cells hold a single element
+    // that is a 144 byte buffer carrying 16 bytes of payload.
+    let cap = len.saturating_add(len).max(required).max(grow_floor());
 
     const MAX: usize = BufferSize::MAX as usize;
 

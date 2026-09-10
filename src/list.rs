@@ -112,6 +112,17 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
         AtomicSharedVector::<T>::header_size()
     }
 
+    /// Byte offsets of the cell fields, measured from the cell itself. Generated
+    /// code reads list cells by raw offset, so it takes these from the type
+    /// rather than assuming a layout.
+    pub const fn cell_index_offset() -> usize {
+        core::mem::offset_of!(crate::unrolled::UnrolledCell<T, P, N, G>, index)
+    }
+
+    pub const fn cell_elements_offset() -> usize {
+        core::mem::offset_of!(crate::unrolled::UnrolledCell<T, P, N, G>, elements)
+    }
+
     /// Compare this list to another for pointer equality
     pub fn ptr_eq(&self, other: &Self) -> bool {
         self.0.ptr_eq(&other.0)
