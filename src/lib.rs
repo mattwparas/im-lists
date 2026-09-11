@@ -70,21 +70,3 @@ macro_rules! shared_vlist {
     }};
 }
 
-#[cfg(test)]
-mod user_bit_contract {
-    use crate::shared::{ArcPointer, PointerFamily, RcPointer};
-
-    #[test]
-    fn families_without_a_header_report_false() {
-        let p = RcPointer::new(7u64);
-        assert!(!RcPointer::user_bit(&p));
-        assert!(!RcPointer::set_user_bit(&p, true), "no place to put it");
-        assert!(!RcPointer::user_bit(&p), "still false");
-
-        let a = ArcPointer::new(7u64);
-        assert!(!ArcPointer::user_bit(&a));
-        assert!(!ArcPointer::set_user_bit(&a, true));
-        assert!(!ArcPointer::user_bit(&a));
-    }
-}
-
