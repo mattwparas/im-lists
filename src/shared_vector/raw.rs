@@ -287,6 +287,11 @@ pub static LIVE_BUFS: core::sync::atomic::AtomicI64 = core::sync::atomic::Atomic
 pub static LIVE_CAP: core::sync::atomic::AtomicI64 = core::sync::atomic::AtomicI64::new(0);
 pub static ALLOC_CALLS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
+/// Bytes the allocator puts in front of a buffer's slots.
+pub fn buffer_header_bytes<T>() -> usize {
+    header_size::<Header<AtomicRefCount, crate::shared_vector::alloc::Global>, T>()
+}
+
 pub fn cap_probe_enabled() -> bool {
     static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *V.get_or_init(|| std::env::var_os("IM_LISTS_CAP_PROBE").is_some())

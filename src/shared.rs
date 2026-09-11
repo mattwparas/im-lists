@@ -15,6 +15,21 @@ pub trait PointerFamily: 'static {
     /// # Safety
     /// This must be called from a pointer as returned from into_raw
     unsafe fn from_raw<T>(this: *const T) -> Self::Pointer<T>;
+
+    /// One bit of metadata carried beside the allocation, for the container to
+    /// use however it likes. A family with nowhere to put it reports `false`
+    /// from both of these, and callers must then keep their own discriminant.
+    fn user_bit<T>(_this: &Self::Pointer<T>) -> bool {
+        false
+    }
+
+    /// Sets the spare bit, returning whether this family could store it.
+    ///
+    /// Takes a shared reference because the bit lives in the allocation header
+    /// rather than the value, so setting it does not disturb `T`.
+    fn set_user_bit<T>(_this: &Self::Pointer<T>, _on: bool) -> bool {
+        false
+    }
 }
 
 pub struct RcPointer;

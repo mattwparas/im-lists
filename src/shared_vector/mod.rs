@@ -1,6 +1,6 @@
 mod drain;
 mod intoiter;
-mod raw;
+pub mod raw;
 mod shared;
 mod splice;
 mod vector;
@@ -17,6 +17,11 @@ pub mod alloc {
     pub use allocator_api2::alloc::{AllocError, Allocator, Global};
 }
 
+/// Smallest capacity a growing buffer will jump to. Std uses 8; for lists whose
+/// cells hold a couple of elements that rounds a 16 byte payload up to a 144
+/// byte buffer. Below 4 the floor stops binding at all - `2 * len` takes over.
+const GROW_FLOOR: usize = 4;
+
 fn grow_floor() -> usize {
     static V: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
     *V.get_or_init(|| {
@@ -24,14 +29,12 @@ fn grow_floor() -> usize {
             .ok()
             .and_then(|x| x.parse().ok())
             .filter(|x| *x > 0)
-            .unwrap_or(8)
+            .unwrap_or(GROW_FLOOR)
     })
 }
 
 pub(crate) fn grow_amortized(len: usize, additional: usize) -> usize {
     let required = len.saturating_add(additional);
-    // The floor used to be 8. For a list whose cells hold a single element
-    // that is a 144 byte buffer carrying 16 bytes of payload.
     let cap = len.saturating_add(len).max(required).max(grow_floor());
 
     const MAX: usize = BufferSize::MAX as usize;

@@ -115,13 +115,37 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     /// Byte offsets of the cell fields, measured from the cell itself. Generated
     /// code reads list cells by raw offset, so it takes these from the type
     /// rather than assuming a layout.
-    pub const fn cell_index_offset() -> usize {
-        core::mem::offset_of!(crate::unrolled::UnrolledCell<T, P, N, G>, index)
+    /// Where the inline element sits - the head of the cell itself.
+    pub const fn cell_elements_offset() -> usize {
+        core::mem::offset_of!(crate::unrolled::UnrolledCell<T, P, N, G>, storage)
     }
 
-    pub const fn cell_elements_offset() -> usize {
-        core::mem::offset_of!(crate::unrolled::UnrolledCell<T, P, N, G>, elements)
+    /// The chunk fields live in the same bytes, so they are all relative to the
+    /// head. Reading any of them on an inline cell reads the element instead.
+    pub const fn cell_index_offset() -> usize {
+        Self::cell_elements_offset() + core::mem::offset_of!(crate::unrolled::ChunkHead<T>, index)
     }
+
+    pub const fn cell_size_offset() -> usize {
+        Self::cell_elements_offset() + core::mem::offset_of!(crate::unrolled::ChunkHead<T>, size)
+    }
+
+    pub const fn cell_buffer_offset() -> usize {
+        Self::cell_elements_offset() + core::mem::offset_of!(crate::unrolled::ChunkHead<T>, buffer)
+    }
+
+    /// Where the link to the next cell lives. The storage discriminant rides in
+    /// its low bit, so generated code reads the flag from here.
+    pub const fn cell_next_offset() -> usize {
+        core::mem::offset_of!(crate::unrolled::UnrolledCell<T, P, N, G>, next)
+    }
+
+    /// Set in the low bit of `next` when the cell's single element lives in the
+    /// storage field itself rather than in a separately allocated chunk.
+    pub const fn cell_inline_flag() -> usize {
+        crate::unrolled::INLINE_TAG
+    }
+
 
     /// Compare this list to another for pointer equality
     pub fn ptr_eq(&self, other: &Self) -> bool {
@@ -135,7 +159,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
 
     #[doc(hidden)]
     pub fn elements_length(&self) -> usize {
-        self.0 .0.elements.len()
+        self.0 .0.slot_len()
     }
 
     #[doc(hidden)]
@@ -209,8 +233,8 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
         self.0
             .node_iter()
             .map(|x| {
-                let mut x = x.clone();
-                P::make_mut(&mut x.0).next = None;
+                let mut x = crate::unrolled::list_from_cell::<T, P, N, G>(x);
+                P::make_mut(&mut x.0).next.set(None);
                 Self(x, PhantomData)
             })
             .collect()
@@ -1638,7 +1662,7 @@ mod arc_tests {
     fn vlist_growth() {
         let list = vlist![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
-        let counts: Vec<_> = list.0.node_iter().map(|x| x.elements().len()).collect();
+        let counts: Vec<_> = list.0.node_iter().map(|x| x.slot_len()).collect();
         assert_eq!(vec![6, 8, 4, 2], counts);
     }
 
