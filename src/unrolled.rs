@@ -669,7 +669,13 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Drop
         // The union does not drop its own field, so pick the live one first.
         unsafe {
             if !self.next.is_inline() {
-                core::mem::ManuallyDrop::drop(&mut self.storage.chunk);
+                // The buffer is what owns the allocation, and it is itself
+                // `ManuallyDrop` inside `ChunkHead`, which has no `Drop` - so
+                // dropping the head alone freed nothing and leaked every chunk
+                // buffer dropped this way (a `cdr` walk over a fresh list leaked
+                // the whole list). The draining paths `mem::take` the buffer
+                // and leave an empty one behind, so it is always valid here.
+                core::mem::ManuallyDrop::drop(&mut (*self.storage.chunk).buffer);
             } else if !self.next.is_moved() {
                 core::mem::ManuallyDrop::drop(&mut self.storage.inline);
             }
