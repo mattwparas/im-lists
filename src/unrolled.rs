@@ -2535,6 +2535,35 @@ mod reference_counting_correctness {
         args.clear();
         assert_eq!(result.strong_count(), 1);
     }
+
+    // A chunked cell dropped on its own - as `cdr_mut` does when it steps past
+    // one - has to release its buffer and the elements in it. It used to drop
+    // only the `ChunkHead`, whose buffer is `ManuallyDrop`, so every element
+    // stayed alive and the buffer leaked: a Steel loop walking a fresh list
+    // with `cdr` leaked the whole list each time.
+    #[test]
+    fn cdr_mut_releases_chunk_buffers() {
+        let tracked = std::rc::Rc::new(());
+        type Tracked = std::rc::Rc<()>;
+        let mut list: UnrolledList<Tracked, RcPointer, 4, 2> =
+            (0..64).map(|_| tracked.clone()).collect();
+        assert_eq!(std::rc::Rc::strong_count(&tracked), 65);
+
+        while list.cdr_mut().is_some() {}
+        drop(list);
+
+        assert_eq!(std::rc::Rc::strong_count(&tracked), 1);
+    }
+
+    #[test]
+    fn dropping_a_whole_list_releases_chunk_buffers() {
+        let tracked = std::rc::Rc::new(());
+        type Tracked = std::rc::Rc<()>;
+        let list: UnrolledList<Tracked, RcPointer, 4, 2> =
+            (0..64).map(|_| tracked.clone()).collect();
+        drop(list);
+        assert_eq!(std::rc::Rc::strong_count(&tracked), 1);
+    }
 }
 
 
