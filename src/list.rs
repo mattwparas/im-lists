@@ -71,7 +71,6 @@ pub type SharedVList<T> = GenericList<T, ArcPointer, 2, 2>;
 pub type VList<T> = GenericList<T, RcPointer, 2, 2>;
 
 #[doc(hidden)]
-#[derive(Copy, Clone)]
 pub struct RawCell<
     T: Clone + 'static,
     P: PointerFamily,
@@ -79,6 +78,21 @@ pub struct RawCell<
     const G: u32,
     D: DropHandler<GenericList<T, P, N, G, D>>,
 >(*const UnrolledCell<T, P, N, G>, PhantomData<D>);
+
+// Derived `Copy`/`Clone` would demand the type parameters be `Copy`, which a
+// raw pointer wrapper has no reason to care about.
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<GenericList<T, P, N, G, D>>>
+    Clone for RawCell<T, P, N, G, D>
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<GenericList<T, P, N, G, D>>>
+    Copy for RawCell<T, P, N, G, D>
+{
+}
 
 impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> Clone
     for GenericList<T, P, N, G, D>
@@ -144,6 +158,12 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     /// storage field itself rather than in a separately allocated chunk.
     pub const fn cell_inline_flag() -> usize {
         crate::unrolled::INLINE_TAG
+    }
+
+    /// Every bit of `next` that is a tag rather than part of the pointer.
+    /// Generated code masks these off to ask whether a next cell exists.
+    pub const fn cell_next_tag_mask() -> usize {
+        crate::unrolled::LINK_TAG_MASK
     }
 
 
@@ -264,6 +284,77 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     #[doc(hidden)]
     unsafe fn from_raw(cell: RawCell<T, P, N, G, D>) -> Self {
         Self(UnrolledList(P::from_raw(cell.0)), PhantomData)
+    }
+
+    /// Where this list's cursor currently sits inside its cell.
+    #[doc(hidden)]
+    pub fn cursor_index(&self) -> usize {
+        self.0.index()
+    }
+
+    /// The next cell in the chain, or `None` at the end.
+    #[doc(hidden)]
+    pub fn next_cell(&self) -> Option<RawCell<T, P, N, G, D>> {
+        self.0.next_cell_ptr().map(|p| RawCell(p, PhantomData))
+    }
+
+    /// `from_raw_with_index` for a caller that only has a bare pointer, which
+    /// is all generated code carries.
+    ///
+    /// # Safety
+    /// `ptr` must be a cell pointer as returned from `as_ptr` / `next_cell`,
+    /// still reachable, and `index` a position that cursor reached.
+    #[doc(hidden)]
+    pub unsafe fn from_raw_parts(ptr: *const u8, index: usize) -> Self {
+        let cell = RawCell(
+            ptr as *const crate::unrolled::UnrolledCell<T, P, N, G>,
+            PhantomData,
+        );
+        unsafe { Self::from_raw_with_index(cell, index) }
+    }
+
+    /// `from_raw_parts`, for a caller that owns the list the cursor walked
+    /// from and is giving it up. Where that list's cells are uniquely owned
+    /// they are reused the way `cdr_mut` would - stepped past for free, the
+    /// target repositioned in place - instead of copying the target cell
+    /// because `self` still shares it.
+    ///
+    /// # Safety
+    /// As `from_raw_parts`, and the cursor must have been walked from `self`.
+    #[doc(hidden)]
+    pub unsafe fn reposition_from_raw_parts(self, ptr: *const u8, index: usize) -> Self {
+        // Take the list out without running the drop handler on an emptied
+        // shell - that costs a thread-local lookup per call.
+        let this = core::mem::ManuallyDrop::new(self);
+        let owned = unsafe { core::ptr::read(&this.0) };
+        match owned.reposition(ptr as *const crate::unrolled::UnrolledCell<T, P, N, G>, index) {
+            Ok(list) => GenericList(list, PhantomData),
+            Err(held) => {
+                let out = unsafe { Self::from_raw_parts(ptr, index) };
+                // Only now: `held` is what keeps the target cell alive.
+                drop(GenericList::<T, P, N, G, D>(held, PhantomData));
+                out
+            }
+        }
+    }
+
+    /// Rebuild a list from a cursor that generated code has been walking in
+    /// registers: the cell it currently sits in, and the position within it.
+    ///
+    /// The caller's reference is left alone - this takes its own - so the cell
+    /// must still be reachable, which it is as long as the head of the list is
+    /// live somewhere. Costs one cell copy when the cursor has moved off the
+    /// cell's own position, and nothing when it has not.
+    ///
+    /// # Safety
+    /// `cell` must be a valid pointer as returned from `as_ptr`, and `index`
+    /// must be a position that cursor actually reached.
+    #[doc(hidden)]
+    pub unsafe fn from_raw_with_index(cell: RawCell<T, P, N, G, D>, index: usize) -> Self {
+        let borrowed = core::mem::ManuallyDrop::new(unsafe { Self::from_raw(cell) });
+        let mut list = (*borrowed).clone();
+        list.0.set_cursor(index);
+        list
     }
 
     /// Get the length of the list
@@ -1816,5 +1907,97 @@ mod vlist_shared_tests {
             (54..64).rev().collect::<Vec<_>>(),
             "take(10)"
         );
+    }
+}
+
+#[cfg(test)]
+mod cursor_tests {
+    use crate::list::List;
+
+    /// Walking a list as (cell, index) and materialising must give the same
+    /// list as the equivalent chain of `cdr`s.
+    #[test]
+    fn cursor_matches_cdr_chain() {
+        for len in 1..40usize {
+            let original: List<usize> = (0..len).collect();
+
+            // Walk with cdr, and in parallel with a raw cursor, comparing at
+            // every step.
+            let mut by_cdr = original.clone();
+            let mut cell = original.as_ptr();
+            let mut index = original.cursor_index();
+
+            for step in 0..len {
+                let materialized =
+                    unsafe { List::<usize>::from_raw_with_index(cell, index) };
+                assert_eq!(
+                    materialized, by_cdr,
+                    "len {len}, step {step}: cursor and cdr disagree"
+                );
+
+                if step + 1 == len {
+                    break;
+                }
+
+                // advance both
+                by_cdr = by_cdr.cdr().expect("still has a tail");
+                if index > 1 {
+                    index -= 1;
+                } else {
+                    let next = unsafe { List::<usize>::call_from_raw(cell, |l| l.next_cell()) };
+                    cell = next.expect("still has a next cell");
+                    index = unsafe { List::<usize>::call_from_raw(cell, |l| l.cursor_index()) };
+                }
+            }
+        }
+    }
+
+    fn shapes(len: usize) -> Vec<List<usize>> {
+        let collected: List<usize> = (0..len).collect();
+        let mut consed = List::new();
+        for i in (0..len).rev() {
+            consed.cons_mut(i);
+        }
+        let mut appended: List<usize> = (0..len / 2).collect();
+        appended.append_mut((len / 2..len).collect());
+        vec![collected, consed, appended]
+    }
+
+    /// Repositioning the owned head must agree with the cdr chain, whether
+    /// the head's cells are unique (reused in place) or shared (copied).
+    #[test]
+    fn reposition_matches_cdr_chain() {
+        for len in 1..40usize {
+            for shape in shapes(len) {
+                for steps in 0..len {
+                    for keep_shared in [false, true] {
+                        let head = shape.clone();
+                        // Unique unless a second owner is kept alive.
+                        let head = if keep_shared { head } else { head.into_iter().collect() };
+                        let witness = if keep_shared { Some(head.clone()) } else { None };
+
+                        // Its own cells, so `head` stays unique when it should.
+                        let mut want: List<usize> = head.iter().cloned().collect();
+                        let mut cell = head.as_ptr();
+                        let mut index = head.cursor_index();
+                        for _ in 0..steps {
+                            want = want.cdr().expect("tail");
+                            if index > 1 {
+                                index -= 1;
+                            } else {
+                                cell = unsafe { List::<usize>::call_from_raw(cell, |l| l.next_cell()) }
+                                    .expect("next cell");
+                                index = unsafe { List::<usize>::call_from_raw(cell, |l| l.cursor_index()) };
+                            }
+                        }
+                        let got = unsafe { head.reposition_from_raw_parts(cell.0 as *const u8, index) };
+                        assert_eq!(got, want, "len {len}, steps {steps}, shared {keep_shared}");
+                        if let Some(w) = witness {
+                            assert_eq!(w.len(), len, "the other owner must be untouched");
+                        }
+                    }
+                }
+            }
+        }
     }
 }

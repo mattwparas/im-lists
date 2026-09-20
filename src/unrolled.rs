@@ -485,8 +485,63 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
         ret
     }
 
+    /// Raw pointer to the next cell, or `None` at the end of the chain. The
+    /// link's tag bits are masked off.
+    pub(crate) fn next_cell_ptr(&self) -> Option<*const UnrolledCell<T, P, N, G>> {
+        let ptr = self.0.next.ptr();
+        if ptr.is_null() {
+            None
+        } else {
+            Some(ptr)
+        }
+    }
+
     pub(crate) fn cdr_exists(&self) -> bool {
         self.0.index() > 1 || self.0.next.is_some()
+    }
+
+    /// Position this list's cursor at `index` within its current cell.
+    ///
+    /// Generated code walks a list as a `(cell, index)` pair held in registers -
+    /// stepping is then arithmetic rather than a new cell - and calls this to
+    /// turn that pair back into a real list when the value escapes. Copying the
+    /// cell here is the cost the register walk was avoiding, so it is paid once,
+    /// on escape, rather than once per step.
+    pub(crate) fn set_cursor(&mut self, index: usize) {
+        if self.0.index() == index {
+            return;
+        }
+
+        // An inline cell holds exactly one element and its cursor is implicitly
+        // 1, so there is no other position to move to.
+        debug_assert!(!self.0.next.is_inline(), "an inline cell has only one cursor position");
+
+        let cell = P::make_mut(&mut self.0);
+        cell.set_index(index);
+    }
+
+    /// Walk this list forward to the cell at `ptr` and set its cursor to
+    /// `index`, the way repeated `cdr_mut` would: cells owned uniquely are
+    /// stepped past without allocating, and a unique target cell is
+    /// repositioned in place. `Err` hands the list back, partly walked, at
+    /// the first shared cell - it still keeps the target reachable.
+    pub(crate) fn reposition(mut self, ptr: *const UnrolledCell<T, P, N, G>, index: usize) -> Result<Self, Self> {
+        loop {
+            if P::as_ptr(&self.0) == ptr {
+                self.set_cursor(index);
+                return Ok(self);
+            }
+            let next = match P::get_mut(&mut self.0) {
+                Some(inner) => inner.next.take(),
+                None => return Err(self),
+            };
+            match next {
+                Some(next) => self = next,
+                // Ran off the end without meeting the cell: not a cell of
+                // this list. Nothing left to hand back.
+                None => return Err(Self::new()),
+            }
+        }
     }
 
     // Returns the cdr of the list
@@ -764,6 +819,9 @@ const TAG_MASK: usize = VARIANT_MASK | MOVED_TAG;
 
 /// Kept for generated code, which only needs to tell inline from not.
 pub(crate) const INLINE_TAG: usize = VARIANT_INLINE;
+
+/// Kept for generated code, which masks these off `next` to get the pointer.
+pub(crate) const LINK_TAG_MASK: usize = TAG_MASK;
 
 impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P, N, G> {
     #[inline(always)]
