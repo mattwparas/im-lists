@@ -229,7 +229,9 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     }
 
     pub fn last(&self) -> Option<&T> {
-        self.node_iter().last().and_then(|x| x.slot_as_slice().first())
+        self.node_iter()
+            .last()
+            .and_then(|x| x.slot_as_slice().first())
     }
 
     // Should be O(1) always
@@ -369,7 +371,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
         } else {
             None
         };
-
 
         // TODO cdr here is an issue - only moves the offset, no way to know that its full
         // Cause its not actually full
@@ -514,7 +515,10 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
 
         // An inline cell holds exactly one element and its cursor is implicitly
         // 1, so there is no other position to move to.
-        debug_assert!(!self.0.next.is_inline(), "an inline cell has only one cursor position");
+        debug_assert!(
+            !self.0.next.is_inline(),
+            "an inline cell has only one cursor position"
+        );
 
         let cell = P::make_mut(&mut self.0);
         cell.set_index(index);
@@ -525,7 +529,11 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     /// stepped past without allocating, and a unique target cell is
     /// repositioned in place. `Err` hands the list back, partly walked, at
     /// the first shared cell - it still keeps the target reachable.
-    pub(crate) fn reposition(mut self, ptr: *const UnrolledCell<T, P, N, G>, index: usize) -> Result<Self, Self> {
+    pub(crate) fn reposition(
+        mut self,
+        ptr: *const UnrolledCell<T, P, N, G>,
+        index: usize,
+    ) -> Result<Self, Self> {
         loop {
             if P::as_ptr(&self.0) == ptr {
                 self.set_cursor(index);
@@ -780,13 +788,10 @@ fn occ_note_element() {
     }
 }
 
-
-
 fn occ_enabled() -> bool {
     static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *V.get_or_init(|| std::env::var_os("IM_LISTS_OCCUPANCY").is_some())
 }
-
 
 /// The link to the next cell, carrying the storage discriminant in its low bit.
 ///
@@ -860,7 +865,6 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
     }
 
     #[inline(always)]
-    #[inline(always)]
     pub(crate) fn set_variant(&mut self, variant: usize) {
         let bits = self.raw as usize;
         self.raw = ((bits & !VARIANT_MASK) | variant) as *const _;
@@ -879,7 +883,11 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
     #[inline(always)]
     pub(crate) fn set_moved(&mut self, on: bool) {
         let bits = self.raw as usize;
-        self.raw = (if on { bits | MOVED_TAG } else { bits & !MOVED_TAG }) as *const _;
+        self.raw = (if on {
+            bits | MOVED_TAG
+        } else {
+            bits & !MOVED_TAG
+        }) as *const _;
     }
 
     #[inline(always)]
@@ -1019,7 +1027,6 @@ pub(crate) union CellStorage<T: Clone + 'static> {
     pub(crate) chunk: core::mem::ManuallyDrop<ChunkHead<T>>,
 }
 
-
 /// Everything a chunked cell needs in the same 16 bytes a single inline element
 /// occupies: its cursor, its capacity target, and the chunk itself.
 #[repr(C)]
@@ -1028,9 +1035,6 @@ pub(crate) struct ChunkHead<T: Clone + 'static> {
     pub(crate) size: u32,
     pub(crate) buffer: core::mem::ManuallyDrop<AtomicSharedVector<T>>,
 }
-
-
-
 
 /// Growth applied when a cons has to start a new chunk. `G` is Bagwell's
 /// geometric schedule; 1 makes every chunk hold a single element, which is what
@@ -1082,9 +1086,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Clone for UnrolledC
                     chunk: core::mem::ManuallyDrop::new(ChunkHead {
                         index: self.storage.chunk.index,
                         size: self.storage.chunk.size,
-                        buffer: core::mem::ManuallyDrop::new(
-                            (*self.storage.chunk.buffer).clone(),
-                        ),
+                        buffer: core::mem::ManuallyDrop::new((*self.storage.chunk.buffer).clone()),
                     }),
                 }
             }
@@ -1160,7 +1162,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
     pub(crate) fn is_inline(&self) -> bool {
         self.next.is_inline()
     }
-
 
     #[inline(always)]
     pub(crate) fn storage(&self) -> &AtomicSharedVector<T> {
@@ -1287,7 +1288,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
         self.storage_mut().push(value)
     }
 
-
     #[inline(always)]
     pub(crate) fn slot_pop(&mut self) -> Option<T> {
         self.storage_mut().pop()
@@ -1361,7 +1361,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
             next: Link::new(next, VARIANT_INLINE),
         }
     }
-
 
     fn new_with_capacity() -> Self {
         Self::new_chunk(0, N, AtomicSharedVector::with_capacity(N as _), None)
@@ -2624,8 +2623,6 @@ mod reference_counting_correctness {
     }
 }
 
-
-
 #[cfg(test)]
 mod split_layout {
     use super::*;
@@ -2646,5 +2643,3 @@ mod split_layout {
         assert_eq!(size_of::<Link<V16, crate::shared::ArcPointer, 1, 2>>(), 8);
     }
 }
-
-
