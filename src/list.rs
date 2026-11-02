@@ -81,16 +81,26 @@ pub struct RawCell<
 
 // Derived `Copy`/`Clone` would demand the type parameters be `Copy`, which a
 // raw pointer wrapper has no reason to care about.
-impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<GenericList<T, P, N, G, D>>>
-    Clone for RawCell<T, P, N, G, D>
+impl<
+        T: Clone,
+        P: PointerFamily,
+        const N: u32,
+        const G: u32,
+        D: DropHandler<GenericList<T, P, N, G, D>>,
+    > Clone for RawCell<T, P, N, G, D>
 {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<GenericList<T, P, N, G, D>>>
-    Copy for RawCell<T, P, N, G, D>
+impl<
+        T: Clone,
+        P: PointerFamily,
+        const N: u32,
+        const G: u32,
+        D: DropHandler<GenericList<T, P, N, G, D>>,
+    > Copy for RawCell<T, P, N, G, D>
 {
 }
 
@@ -165,7 +175,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     pub const fn cell_next_tag_mask() -> usize {
         crate::unrolled::LINK_TAG_MASK
     }
-
 
     /// Compare this list to another for pointer equality
     pub fn ptr_eq(&self, other: &Self) -> bool {
@@ -327,7 +336,10 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
         // shell - that costs a thread-local lookup per call.
         let this = core::mem::ManuallyDrop::new(self);
         let owned = unsafe { core::ptr::read(&this.0) };
-        match owned.reposition(ptr as *const crate::unrolled::UnrolledCell<T, P, N, G>, index) {
+        match owned.reposition(
+            ptr as *const crate::unrolled::UnrolledCell<T, P, N, G>,
+            index,
+        ) {
             Ok(list) => GenericList(list, PhantomData),
             Err(held) => {
                 let out = unsafe { Self::from_raw_parts(ptr, index) };
@@ -1928,8 +1940,7 @@ mod cursor_tests {
             let mut index = original.cursor_index();
 
             for step in 0..len {
-                let materialized =
-                    unsafe { List::<usize>::from_raw_with_index(cell, index) };
+                let materialized = unsafe { List::<usize>::from_raw_with_index(cell, index) };
                 assert_eq!(
                     materialized, by_cdr,
                     "len {len}, step {step}: cursor and cdr disagree"
@@ -1973,8 +1984,16 @@ mod cursor_tests {
                     for keep_shared in [false, true] {
                         let head = shape.clone();
                         // Unique unless a second owner is kept alive.
-                        let head = if keep_shared { head } else { head.into_iter().collect() };
-                        let witness = if keep_shared { Some(head.clone()) } else { None };
+                        let head = if keep_shared {
+                            head
+                        } else {
+                            head.into_iter().collect()
+                        };
+                        let witness = if keep_shared {
+                            Some(head.clone())
+                        } else {
+                            None
+                        };
 
                         // Its own cells, so `head` stays unique when it should.
                         let mut want: List<usize> = head.iter().cloned().collect();
@@ -1985,12 +2004,17 @@ mod cursor_tests {
                             if index > 1 {
                                 index -= 1;
                             } else {
-                                cell = unsafe { List::<usize>::call_from_raw(cell, |l| l.next_cell()) }
-                                    .expect("next cell");
-                                index = unsafe { List::<usize>::call_from_raw(cell, |l| l.cursor_index()) };
+                                cell = unsafe {
+                                    List::<usize>::call_from_raw(cell, |l| l.next_cell())
+                                }
+                                .expect("next cell");
+                                index = unsafe {
+                                    List::<usize>::call_from_raw(cell, |l| l.cursor_index())
+                                };
                             }
                         }
-                        let got = unsafe { head.reposition_from_raw_parts(cell.0 as *const u8, index) };
+                        let got =
+                            unsafe { head.reposition_from_raw_parts(cell.0 as *const u8, index) };
                         assert_eq!(got, want, "len {len}, steps {steps}, shared {keep_shared}");
                         if let Some(w) = witness {
                             assert_eq!(w.len(), len, "the other owner must be untouched");

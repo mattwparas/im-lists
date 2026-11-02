@@ -69,4 +69,3 @@ macro_rules! shared_vlist {
         vec![$($x)*].into_iter().collect::<$crate::list::SharedVList<_>>()
     }};
 }
-
