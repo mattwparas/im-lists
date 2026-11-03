@@ -247,7 +247,7 @@ fn act_on_list(model: &mut ListModel, action: Action) {
     }
 }
 
-// Check a list against its model through every way of reading it
+// Check a list against its model via len, iter, last and a cdr walk
 fn assert_matches(list: &List<Tracked>, expected: &[usize], what: &str) {
     list.assert_invariants();
     assert_eq!(list.len(), expected.len(), "{what}: len");

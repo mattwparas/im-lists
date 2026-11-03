@@ -1809,7 +1809,7 @@ mod vlist_shared_tests {
     use crate::list::GenericList;
     use crate::shared::RcPointer;
 
-    // Test using Steel's configuration
+    // Steel's configuration
     type V<T> = GenericList<T, RcPointer, 1, 2>;
 
     #[test]
@@ -1819,7 +1819,7 @@ mod vlist_shared_tests {
 
         for i in 0..200 {
             acc = V::cons(i, acc.clone());
-            // retain so that every later cons sees a shared node
+            // Keep every version alive so each cons sees a shared node
             keep.push(acc.clone());
         }
 
@@ -1874,7 +1874,7 @@ mod vlist_shared_tests {
         assert_eq!(appended.len(), 101, "append len");
         assert_eq!(appended.last(), Some(&1000), "append last");
 
-        // every retained prefix still walks correctly after all of the above
+        // None of the above should have touched the retained prefixes
         for (n, snap) in keep.iter().enumerate() {
             assert_eq!(snap.iter().count(), n + 1, "prefix {n} iter");
             assert_eq!(snap.last(), Some(&0), "prefix {n} last");
@@ -1911,15 +1911,13 @@ mod vlist_shared_tests {
 mod cursor_tests {
     use crate::list::List;
 
-    /// Walking a list as (cell, index) and materialising must give the same
-    /// list as the equivalent chain of `cdr`s.
+    // A raw (cell, index) cursor should match the equivalent chain of `cdr`s
     #[test]
     fn cursor_matches_cdr_chain() {
         for len in 1..40usize {
             let original: List<usize> = (0..len).collect();
 
-            // Walk with cdr, and in parallel with a raw cursor, comparing at
-            // every step.
+            // Walk with `cdr` and a raw cursor side by side
             let mut by_cdr = original.clone();
             let mut cell = original.as_ptr();
             let mut index = original.cursor_index();
@@ -1935,7 +1933,6 @@ mod cursor_tests {
                     break;
                 }
 
-                // advance both
                 by_cdr = by_cdr.cdr().expect("still has a tail");
                 if index > 1 {
                     index -= 1;
@@ -1959,8 +1956,8 @@ mod cursor_tests {
         vec![collected, consed, appended]
     }
 
-    /// Repositioning the owned head must agree with the cdr chain, whether
-    /// the head's cells are unique (reused in place) or shared (copied).
+    // Repositioning should match the `cdr` chain whether the cells are unique
+    // (reused in place) or shared (copied)
     #[test]
     fn reposition_matches_cdr_chain() {
         for len in 1..40usize {
@@ -1968,7 +1965,7 @@ mod cursor_tests {
                 for steps in 0..len {
                     for keep_shared in [false, true] {
                         let head = shape.clone();
-                        // Unique unless a second owner is kept alive.
+                        // Unique unless a second owner is kept alive
                         let head = if keep_shared {
                             head
                         } else {
@@ -1980,7 +1977,7 @@ mod cursor_tests {
                             None
                         };
 
-                        // Its own cells, so `head` stays unique when it should.
+                        // Built separately so it doesn't share cells with `head`
                         let mut want: List<usize> = head.iter().cloned().collect();
                         let mut cell = head.as_ptr();
                         let mut index = head.cursor_index();
@@ -2045,8 +2042,7 @@ mod pop_front_tests {
         vec![collected, consed, appended]
     }
 
-    /// Popping everything off must give the same values as iterating,
-    /// whether or not anyone else holds on to the list
+    // Popping everything off should match iterating, shared or not
     #[test]
     fn pop_front_drains_in_order() {
         for len in 0..40usize {
@@ -2115,8 +2111,7 @@ mod cursor_proptests {
         list
     }
 
-    /// Walking a list as a raw (cell, index) cursor and then materializing it
-    /// must give the same list as the equivalent chain of `cdr`s
+    // A raw (cell, index) cursor should match the equivalent chain of `cdr`s
     fn check_cursor<const N: u32, const G: u32>(ops: Vec<Build>, steps: usize, keep_shared: bool) {
         let mut keep = Vec::new();
         let head = build::<N, G>(ops, &mut keep);
@@ -2152,7 +2147,7 @@ mod cursor_proptests {
         let repositioned = unsafe { head.reposition_from_raw_parts(cell.0 as *const u8, index) };
         assert!(Iterator::eq(repositioned.iter(), want.iter()), "reposition");
 
-        // Other owners must not have been disturbed
+        // Other owners should be untouched
         drop(materialized);
         for list in &keep {
             assert!(list.iter().count() == list.len());
