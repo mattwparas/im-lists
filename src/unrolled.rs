@@ -32,9 +32,8 @@ type DrainingConsumingIter<T, P, const N: u32, const G: u32> = FlatMap<
     fn(UnrolledList<T, P, N, G>) -> CellDrain<T>,
 >;
 
-/// One cell's worth of drained values. A cell holding its element inline hands
-/// it straight back - going out to a buffer just to iterate one value was
-/// allocating per cons on the consuming-iteration path.
+/// The values drained from a single cell. Inline cells hand back their one
+/// value directly
 pub enum CellDrain<T> {
     One(Option<T>),
     Chunk(Rev<std::iter::Take<crate::shared_vector::IntoIter<T>>>),
@@ -127,7 +126,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     }
 
     pub fn shared_ptr_eq(&self, other: &Self) -> bool {
-        // P::ptr_eq(&self.0.elements, &other.0.elements) && self.0.index == other.0.index()
+        // P::ptr_eq(&self.0.elements, &other.0.elements) && self.0.index == other.0.index
         self.0.slot_ptr_eq(&other.0) && self.0.index() == other.0.index()
     }
 
@@ -148,30 +147,28 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
         self.0.slot_iter().take(self.index() as _).rev()
     }
 
-    pub fn draining_iterator(self) -> Option<DrainingConsumingWrapper<T, P, N, G>> {
-        Some(DrainingConsumingWrapper(
-            self.into_draining_node_iter().flat_map(|x| {
-                let index = x.index();
+    pub fn draining_iterator(self) -> DrainingConsumingWrapper<T, P, N, G> {
+        DrainingConsumingWrapper(self.into_draining_node_iter().flat_map(|x| {
+            let index = x.index();
 
-                P::try_unwrap(x.0)
-                    .map(|mut cell| {
-                        if let Some(value) = cell.take_inline() {
-                            CellDrain::One((index >= 1).then_some(value))
-                        } else if cell.slot_is_unique() {
-                            CellDrain::Chunk(
-                                std::mem::take(cell.storage_mut())
-                                    .into_unique()
-                                    .into_iter()
-                                    .take(index as _)
-                                    .rev(),
-                            )
-                        } else {
-                            CellDrain::One(None)
-                        }
-                    })
-                    .unwrap_or(CellDrain::One(None))
-            }),
-        ))
+            P::try_unwrap(x.0)
+                .map(|mut cell| {
+                    if let Some(value) = cell.take_inline() {
+                        CellDrain::One((index >= 1).then_some(value))
+                    } else if cell.slot_is_unique() {
+                        CellDrain::Chunk(
+                            std::mem::take(cell.storage_mut())
+                                .into_unique()
+                                .into_iter()
+                                .take(index as _)
+                                .rev(),
+                        )
+                    } else {
+                        CellDrain::One(None)
+                    }
+                })
+                .unwrap_or(CellDrain::One(None))
+        }))
     }
 
     // #[cfg(test)]
@@ -182,7 +179,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     // This is actually like O(n / 64) which is actually quite nice
     // Saves us some time
     pub fn len(&self) -> usize {
-        self.node_iter().map(|node| node.index() as usize).sum()
+        self.node_iter().map(|node| node.index()).sum()
     }
 
     // [0 1 2 3 4 5] -> [6 7 8 9 10]
@@ -196,9 +193,8 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
             // let elements_mut = P::make_mut(&mut inner.elements);
 
             if inner.index() < inner.slot_len() {
-                // elements_mut.truncate(inner.index());
-                let idx = inner.index() as usize;
-                inner.slot_truncate(idx);
+                // elements_mut.truncate(inner.index);
+                inner.slot_truncate(inner.index());
             }
 
             // elements_mut.reverse();
@@ -211,12 +207,9 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
             // let elements_mut = P::make_mut(&mut cell.elements);
 
             if cell.index() < cell.slot_len() {
-                // elements_mut.truncate(cell.index());
+                // elements_mut.truncate(cell.index);
 
-                {
-                    let idx = cell.index() as usize;
-                    cell.slot_truncate(idx)
-                }
+                cell.slot_truncate(cell.index());
             }
 
             // elements_mut.reverse();
@@ -269,9 +262,9 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
                 inner.slot_ensure_unique();
 
                 // Grab the end of the vector, this will be the new backing
-                // let remaining = elements_mut.split_off(inner.index() - count);
+                // let remaining = elements_mut.split_off(inner.index - count);
 
-                let at = inner.index() as usize - count;
+                let at = inner.index() - count;
                 let remaining = split_off(inner.storage_mut(), at);
 
                 inner.set_index(count as _);
@@ -286,6 +279,15 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
                 // Note: We might want to truncate the remaining
                 // elements of the vector.
                 count -= node.0.index();
+
+                // Landed exactly on the end of this node, so it's the new tail.
+                // Carrying on would add an empty node to the end
+                if count == 0 {
+                    P::make_mut(&mut node.0).next.set(None);
+                    nodes.push(node);
+                    break;
+                }
+
                 nodes.push(node);
             }
         }
@@ -337,7 +339,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     }
 
     pub fn cons_mut(&mut self, value: T) {
-        let index = self.0.index() as usize;
+        let index = self.0.index();
         let mut elements_len = self.elements().len();
         let size = self.size();
 
@@ -346,20 +348,14 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
         // yet been truncated, we should attempt to eagerly do so, otherwise
         // we should fall back to the existing implementation.
         let already_unique: Option<&mut UnrolledCell<T, P, N, G>> = if index < elements_len {
-            // The cursor is behind LastUsed, so per the paper this is a cons
-            // onto the tail of a longer list and belongs on the new-block path.
-            // The one exception is a suffix nobody else can observe: over a
-            // uniquely owned buffer, truncating is pure reclamation - no copy,
-            // and no tail whose identity anyone could ask about.
-            if frontier_cons_enabled() && !self.0.slot_is_unique() {
+            // Consing onto the tail of a longer list. If someone else can see the
+            // rest of the buffer, link to it from a new cell instead of copying
+            if !self.0.slot_is_unique() {
                 self.slow_path_new_node(value);
                 return;
             }
-            // Only when we actually own the cell. `make_mut` on a shared one
-            // copies the whole chunk just to truncate a copy nobody else can
-            // see, which is how a cons onto shared structure ends up O(chunk).
-            // Shared falls through to the paths below, which already answer it
-            // by allocating a new node.
+            // Only truncate if we own the cell - `make_mut` would copy the whole
+            // chunk. Otherwise fall through to allocating a new node
             match P::get_mut(&mut self.0) {
                 Some(cell) => {
                     cell.slot_truncate(index);
@@ -375,27 +371,8 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
         // TODO cdr here is an issue - only moves the offset, no way to know that its full
         // Cause its not actually full
         if elements_len > size as usize - 1 {
-            // Always initialize a vec with half the capacity of the previous one.
-            // Never zero: an empty buffer reallocates on the first push, and
-            // `grow_amortized` has a floor of 8, so a one-element cell would
-            // otherwise carry a buffer sized for eight.
-            let cap = (self.size() as usize / 4).max(1);
-            let size = self.size();
-            let grown = size * cons_growth(UnrolledCell::<T, P, N, G>::GROWTH_RATE);
-
-            let old_self = std::mem::replace(self, UnrolledList::new());
-
-            let cell = if inline_cells_enabled() {
-                UnrolledCell::new_inline(value, Some(old_self))
-            } else {
-                occ_note_chunk(cap);
-                let mut vec = Vector::with_capacity(cap);
-                vec.push(value);
-                occ_note_element();
-                UnrolledCell::new_chunk(1, grown, vec.into_shared_atomic(), Some(old_self))
-            };
-
-            *self = UnrolledList(P::new(cell));
+            // Full - start a new cell
+            self.push_inline_cell(value);
         } else {
             // If we can, save the value. We can shrink this down a bit
             if let Some(inner) = already_unique {
@@ -426,36 +403,24 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     }
 
     fn slow_path_new_node(&mut self, value: T) {
-        // Only grow if its actually larger enough
-        let filled = self.elements().len() > self.size() as usize / 4;
+        self.push_inline_cell(value);
+    }
 
-        let size = self.size();
+    // Put `value` in a new cell in front of this list. New cells start inline,
+    // see `deinline`
+    fn push_inline_cell(&mut self, value: T) {
+        // Swap the new cell in rather than going through `Self::new()`, which
+        // costs a thread-local lookup
+        let mut rest = UnrolledList(P::new(UnrolledCell::new_inline(value, None)));
+        std::mem::swap(self, &mut rest);
 
-        let size = if filled {
-            size.saturating_mul(cons_growth(UnrolledCell::<T, P, N, G>::GROWTH_RATE))
-        } else {
-            size
-        };
-
-        let old_self = std::mem::replace(self, UnrolledList::new());
-
-        let next = if old_self.is_empty() {
-            None
-        } else {
-            Some(old_self)
-        };
-
-        let cell = if inline_cells_enabled() {
-            UnrolledCell::new_inline(value, next)
-        } else {
-            occ_note_chunk(N as usize);
-            let mut vec = Vector::with_capacity(N as _);
-            vec.push(value);
-            occ_note_element();
-            UnrolledCell::new_chunk(1, size, vec.into_shared_atomic(), next)
-        };
-
-        *self = UnrolledList(P::new(cell));
+        // Don't link to an empty list
+        if !(rest.is_empty() && rest.0.next.is_none()) {
+            P::get_mut(&mut self.0)
+                .expect("A new cell has only one owner")
+                .next
+                .set(Some(rest));
+        }
     }
 
     // Should be O(1) always
@@ -464,30 +429,50 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
         self.0.cdr()
     }
 
-    // Just pop off the internal value and move the index up
+    // Remove the first value of the list and return it
     pub fn pop_front(&mut self) -> Option<T> {
-        let cell = P::make_mut(&mut self.0);
-        // let elements = P::make_mut(&mut cell.elements);
-        // let ret = elements.pop();
-        let ret = cell.slot_pop();
+        // If we own the values, move the first one out
+        if let Some(cell) = P::get_mut(&mut self.0) {
+            if let Some(value) = cell.take_inline() {
+                let next = cell.next.take();
+                *self = next.unwrap_or_default();
+                return Some(value);
+            }
 
-        if ret.is_some() {
-            cell.set_index(cell.index() - 1);
-        }
+            if cell.slot_is_unique() {
+                let index = cell.index();
+                if index == 0 {
+                    return None;
+                }
 
-        // If after we've popped, its empty, move the pointer to the
-        // next one (if there is one)
-        if cell.index() == 0 {
-            if let Some(mut next) = cell.next.take() {
-                std::mem::swap(self, &mut next);
+                // The cursor may be behind the end of the buffer, so drop
+                // anything past it before popping
+                cell.slot_truncate(index);
+                let ret = cell.slot_pop();
+                cell.set_index(index - 1);
+
+                // If after we've popped, its empty, move the pointer to the
+                // next one (if there is one)
+                if index == 1 {
+                    if let Some(next) = cell.next.take() {
+                        *self = next;
+                    }
+                }
+
+                return ret;
             }
         }
 
+        // Otherwise someone else can see the values, so clone the first one
+        // and move the cursor past it
+        let ret = self.car();
+        if ret.is_some() {
+            self.cdr_mut();
+        }
         ret
     }
 
-    /// Raw pointer to the next cell, or `None` at the end of the chain. The
-    /// link's tag bits are masked off.
+    // Raw pointer to the next cell, with the tag bits masked off
     pub(crate) fn next_cell_ptr(&self) -> Option<*const UnrolledCell<T, P, N, G>> {
         let ptr = self.0.next.ptr();
         if ptr.is_null() {
@@ -501,20 +486,14 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
         self.0.index() > 1 || self.0.next.is_some()
     }
 
-    /// Position this list's cursor at `index` within its current cell.
-    ///
-    /// Generated code walks a list as a `(cell, index)` pair held in registers -
-    /// stepping is then arithmetic rather than a new cell - and calls this to
-    /// turn that pair back into a real list when the value escapes. Copying the
-    /// cell here is the cost the register walk was avoiding, so it is paid once,
-    /// on escape, rather than once per step.
+    // Move the cursor to `index` within the current cell. Copies the cell
+    // if it's shared
     pub(crate) fn set_cursor(&mut self, index: usize) {
         if self.0.index() == index {
             return;
         }
 
-        // An inline cell holds exactly one element and its cursor is implicitly
-        // 1, so there is no other position to move to.
+        // Inline cells only have the one position
         debug_assert!(
             !self.0.next.is_inline(),
             "an inline cell has only one cursor position"
@@ -524,11 +503,9 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
         cell.set_index(index);
     }
 
-    /// Walk this list forward to the cell at `ptr` and set its cursor to
-    /// `index`, the way repeated `cdr_mut` would: cells owned uniquely are
-    /// stepped past without allocating, and a unique target cell is
-    /// repositioned in place. `Err` hands the list back, partly walked, at
-    /// the first shared cell - it still keeps the target reachable.
+    // Walk forward to the cell at `ptr` and set its cursor to `index`, like
+    // repeated `cdr_mut`. Returns the partially walked list as `Err` if we hit
+    // a shared cell first - it still keeps the target alive
     pub(crate) fn reposition(
         mut self,
         ptr: *const UnrolledCell<T, P, N, G>,
@@ -545,8 +522,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
             };
             match next {
                 Some(next) => self = next,
-                // Ran off the end without meeting the cell: not a cell of
-                // this list. Nothing left to hand back.
+                // `ptr` wasn't in this list
                 None => return Err(Self::new()),
             }
         }
@@ -641,9 +617,21 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     // Debateable whether I want them marked as full
     #[cfg(test)]
     pub fn assert_invariants(&self) {
-        assert!(self
-            .node_iter()
-            .all(|node| node.slot_len() <= node.cap() as usize))
+        for node in self.node_iter() {
+            assert!(node.slot_len() <= node.cap() as usize, "node over capacity");
+            assert!(
+                node.index() <= node.slot_len(),
+                "cursor past the end of the node"
+            );
+        }
+
+        // Only an empty list gets to have an empty node
+        if self.0.next.is_some() {
+            assert!(
+                self.node_iter().all(|node| node.index() > 0),
+                "empty node in the chain"
+            );
+        }
     }
 
     pub fn get(&self, mut index: usize) -> Option<&T> {
@@ -729,15 +717,11 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Drop
     for UnrolledCell<T, P, N, G>
 {
     fn drop(&mut self) {
-        // The union does not drop its own field, so pick the live one first.
+        // Unions don't drop their fields, so drop whichever one is live
         unsafe {
             if !self.next.is_inline() {
-                // The buffer is what owns the allocation, and it is itself
-                // `ManuallyDrop` inside `ChunkHead`, which has no `Drop` - so
-                // dropping the head alone freed nothing and leaked every chunk
-                // buffer dropped this way (a `cdr` walk over a fresh list leaked
-                // the whole list). The draining paths `mem::take` the buffer
-                // and leave an empty one behind, so it is always valid here.
+                // The buffer is `ManuallyDrop` too, so drop it directly. Draining
+                // leaves an empty buffer behind, so this is always valid
                 core::mem::ManuallyDrop::drop(&mut (*self.storage.chunk).buffer);
             } else if !self.next.is_moved() {
                 core::mem::ManuallyDrop::drop(&mut self.storage.inline);
@@ -757,86 +741,47 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Drop
     }
 }
 
-// TEMPORARY: chunk occupancy instrumentation.
-pub static OCC_CHUNKS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
-pub static OCC_CAPACITY: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
-pub static OCC_ELEMENTS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
-
-#[inline]
-fn occ_note_chunk(cap: usize) {
-    use core::sync::atomic::Ordering::Relaxed;
-    if !occ_enabled() {
-        return;
-    }
-    OCC_CAPACITY.fetch_add(cap as u64, Relaxed);
-    let n = OCC_CHUNKS.fetch_add(1, Relaxed) + 1;
-    if n % 20_000_000 == 0 {
-        let cap = OCC_CAPACITY.load(Relaxed);
-        let el = OCC_ELEMENTS.load(Relaxed);
-        eprintln!(
-            "occupancy: chunks={n} capacity_slots={cap} elements={el} fill={:.1}% avg_cap={:.1}",
-            100.0 * el as f64 / cap.max(1) as f64,
-            cap as f64 / n as f64
-        );
-    }
-}
-
-#[inline]
-fn occ_note_element() {
-    if occ_enabled() {
-        OCC_ELEMENTS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-    }
-}
-
-fn occ_enabled() -> bool {
-    static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *V.get_or_init(|| std::env::var_os("IM_LISTS_OCCUPANCY").is_some())
-}
-
-/// The link to the next cell, carrying the storage discriminant in its low bit.
-///
-/// The flag has to live inside the cell: `P::try_unwrap` hands out owned cells
-/// that have left their allocation, and their `Drop` still has to decide which
-/// arm to drop. `next` is the only field with room for it, and it sits at the
-/// same offset in both arms, so reading the flag never depends on knowing which
-/// arm you are looking at.
+// The link to the next cell. The low bits hold which arm of the cell's
+// storage is live, and whether an inline value has been moved out.
+// These have to live in the cell itself, since cells moved out by
+// `P::try_unwrap` still need to know what to drop
 #[repr(transparent)]
 pub(crate) struct Link<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> {
     raw: *const UnrolledCell<T, P, N, G>,
-    // `raw` reaches `P` only through the cell, which contains a `Link` in turn,
-    // so the parameter reads as purely recursive without this.
+    // Otherwise `P` is only used recursively, which the compiler rejects
     _marker: core::marker::PhantomData<fn() -> P>,
 }
 
-/// Bit 0: this cell keeps its single element inline rather than in a chunk.
-/// Bit 1: that element has already been moved out, so `Drop` leaves it alone.
-/// Cells are at least word aligned, so both are ours.
-/// Which arm of the union this cell is using, in the low bits of the link.
-/// Cells are word aligned, so bits 0..3 are ours - exactly enough for three
-/// variants plus the moved flag, with nothing spare.
+// Tag bits in `Link`:
+// - bits 0..=1: which arm of the storage is live. Bit 1 is unused for now
+// - bit 2: an inline value has been moved out
+// `UnrolledCell` is aligned to 8, so these are free on every target
 pub(crate) const VARIANT_CHUNK: usize = 0;
 pub(crate) const VARIANT_INLINE: usize = 1;
 pub(crate) const VARIANT_MASK: usize = 3;
 
-/// Set once an inline element has been moved out, so `Drop` leaves it alone.
 const MOVED_TAG: usize = 4;
 const TAG_MASK: usize = VARIANT_MASK | MOVED_TAG;
 
-/// Kept for generated code, which only needs to tell inline from not.
+// Exposed for generated code, see `GenericList::cell_inline_flag`
 pub(crate) const INLINE_TAG: usize = VARIANT_INLINE;
-
-/// Kept for generated code, which masks these off `next` to get the pointer.
 pub(crate) const LINK_TAG_MASK: usize = TAG_MASK;
 
 impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P, N, G> {
     #[inline(always)]
     fn pack(ptr: *const UnrolledCell<T, P, N, G>, variant: usize) -> Self {
+        const {
+            assert!(
+                core::mem::align_of::<UnrolledCell<T, P, N, G>>() > TAG_MASK,
+                "cell alignment must leave the tag bits free"
+            )
+        };
         debug_assert!(
-            ptr as usize & TAG_MASK == 0,
+            ptr.addr() & TAG_MASK == 0,
             "cell pointers are aligned, so the low bits are ours"
         );
         Self {
-            raw: ((ptr as usize) | variant) as *const _,
+            raw: ptr.map_addr(|addr| addr | variant),
             _marker: core::marker::PhantomData,
         }
     }
@@ -856,7 +801,7 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
 
     #[inline(always)]
     pub(crate) fn variant(&self) -> usize {
-        self.raw as usize & VARIANT_MASK
+        self.raw.addr() & VARIANT_MASK
     }
 
     #[inline(always)]
@@ -866,28 +811,28 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
 
     #[inline(always)]
     pub(crate) fn set_variant(&mut self, variant: usize) {
-        let bits = self.raw as usize;
-        self.raw = ((bits & !VARIANT_MASK) | variant) as *const _;
+        self.raw = self.raw.map_addr(|addr| (addr & !VARIANT_MASK) | variant);
     }
 
     #[inline(always)]
     fn ptr(&self) -> *const UnrolledCell<T, P, N, G> {
-        ((self.raw as usize) & !TAG_MASK) as *const _
+        self.raw.map_addr(|addr| addr & !TAG_MASK)
     }
 
     #[inline(always)]
     pub(crate) fn is_moved(&self) -> bool {
-        self.raw as usize & MOVED_TAG != 0
+        self.raw.addr() & MOVED_TAG != 0
     }
 
     #[inline(always)]
     pub(crate) fn set_moved(&mut self, on: bool) {
-        let bits = self.raw as usize;
-        self.raw = (if on {
-            bits | MOVED_TAG
-        } else {
-            bits & !MOVED_TAG
-        }) as *const _;
+        self.raw = self.raw.map_addr(|addr| {
+            if on {
+                addr | MOVED_TAG
+            } else {
+                addr & !MOVED_TAG
+            }
+        });
     }
 
     #[inline(always)]
@@ -900,23 +845,15 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
         self.ptr().is_null()
     }
 
-    /// The next cell, borrowed without touching any count.
+    // Borrow the next cell
     #[inline(always)]
     pub(crate) fn cell(&self) -> Option<&UnrolledCell<T, P, N, G>> {
         unsafe { self.ptr().as_ref() }
     }
 
-    /// The link as a list, borrowed. For the few callers that want the pointer
-    /// rather than the cell - a strong count, say.
+    // Borrow the next cell as a list, without touching the count
     #[inline(always)]
     pub(crate) fn borrow(&self) -> Option<core::mem::ManuallyDrop<UnrolledList<T, P, N, G>>> {
-        self.borrow_list()
-    }
-
-    /// The link as a list, for the few callers that need the pointer itself.
-    /// Deliberately `ManuallyDrop` - this borrows, it does not take.
-    #[inline(always)]
-    fn borrow_list(&self) -> Option<core::mem::ManuallyDrop<UnrolledList<T, P, N, G>>> {
         let ptr = self.ptr();
         if ptr.is_null() {
             None
@@ -927,7 +864,7 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
         }
     }
 
-    /// A second reference to the same next cell, flag included.
+    // Clone the link, keeping the tags
     #[inline(always)]
     pub(crate) fn clone_link(&self) -> Self {
         let mut cloned = Self::new(self.clone_list(), self.variant());
@@ -937,15 +874,14 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
 
     #[inline(always)]
     pub(crate) fn clone_list(&self) -> Option<UnrolledList<T, P, N, G>> {
-        self.borrow_list()
-            .map(|list| UnrolledList(P::clone(&list.0)))
+        self.borrow().map(|list| UnrolledList(P::clone(&list.0)))
     }
 
-    /// Take the link, leaving the flag where it is.
+    // Take the next cell, leaving the tags in place
     #[inline(always)]
     pub(crate) fn take(&mut self) -> Option<UnrolledList<T, P, N, G>> {
         let ptr = self.ptr();
-        self.raw = ((self.raw as usize) & TAG_MASK) as *const _;
+        self.raw = core::ptr::without_provenance(self.raw.addr() & TAG_MASK);
         if ptr.is_null() {
             None
         } else {
@@ -961,7 +897,7 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
     }
 
     pub(crate) fn strong_count(&self) -> usize {
-        self.borrow_list()
+        self.borrow()
             .map(|list| P::strong_count(&list.0))
             .unwrap_or(0)
     }
@@ -976,11 +912,9 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
     }
 }
 
-/// A counted handle to the cell, recovered from a bare reference.
-///
-/// Sound because every `UnrolledCell` this is called on lives at the start of a
-/// `P` allocation - the node iterators only ever hand out cells reached through
-/// a `Link`, which is exactly such a pointer.
+// Get a new reference to a cell from a borrow of it. Only valid for cells
+// that live inside a `P` allocation, which is all of the ones the node
+// iterators hand out
 #[inline(always)]
 pub(crate) fn list_from_cell<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32>(
     cell: &UnrolledCell<T, P, N, G>,
@@ -991,8 +925,7 @@ pub(crate) fn list_from_cell<T: Clone + 'static, P: PointerFamily, const N: u32,
     UnrolledList(P::clone(&borrowed.0))
 }
 
-// A `Link` owns exactly one `P::Pointer`, so it is exactly as shareable as one.
-// Spelled out because the raw pointer inside would otherwise make it neither.
+// A `Link` is just a `P::Pointer`, so it's as `Send`/`Sync` as one
 unsafe impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Send
     for Link<T, P, N, G>
 where
@@ -1013,22 +946,15 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Drop for 
     }
 }
 
-/// A cell holding a single element stores it here rather than in a separately
-/// allocated buffer: that buffer costs a 16 byte header plus the allocation
-/// itself, and a one element chunk's `cdr` is just `next`, so nothing needs to
-/// share it. Measured cheaper than boxing the element, which trades 8 bytes of
-/// cell for a 16 byte allocation.
-///
-/// The discriminant is the high bit of `size`, which only ever holds small
-/// capacities. `repr(C)` because generated code reads these cells by offset.
+// A cell with a single element stores it inline, saving the allocation of
+// a buffer. Which arm is live is tracked in the tag bits of `next`
 #[repr(C)]
 pub(crate) union CellStorage<T: Clone + 'static> {
     pub(crate) inline: core::mem::ManuallyDrop<T>,
     pub(crate) chunk: core::mem::ManuallyDrop<ChunkHead<T>>,
 }
 
-/// Everything a chunked cell needs in the same 16 bytes a single inline element
-/// occupies: its cursor, its capacity target, and the chunk itself.
+// The cursor, capacity and buffer of a chunked cell
 #[repr(C)]
 pub(crate) struct ChunkHead<T: Clone + 'static> {
     pub(crate) index: u32,
@@ -1036,39 +962,8 @@ pub(crate) struct ChunkHead<T: Clone + 'static> {
     pub(crate) buffer: core::mem::ManuallyDrop<AtomicSharedVector<T>>,
 }
 
-/// Growth applied when a cons has to start a new chunk. `G` is Bagwell's
-/// geometric schedule; 1 makes every chunk hold a single element, which is what
-/// heavy structural sharing degenerates to anyway.
-fn cons_growth(default: u32) -> u32 {
-    static V: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
-    V.get_or_init(|| {
-        std::env::var("IM_LISTS_CONS_GROWTH")
-            .ok()
-            .and_then(|x| x.parse().ok())
-            .filter(|x| *x >= 1)
-    })
-    .unwrap_or(default)
-}
-
-fn inline_cells_enabled() -> bool {
-    static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *V.get_or_init(|| std::env::var("IM_LISTS_INLINE_CELL").as_deref() != Ok("false"))
-}
-
-// Bagwell, Fast Functional Lists section 2.1. `cons` compares the pointer
-// offset with LastUsed: equal means this cell sits at the frontier of its block
-// and the entry can be written in place; less than means "a cons is being
-// applied to the tail of a longer list", where the paper allocates a new block
-// whose link is that tail, so "the two lists now share a common tail, just as
-// would have been the case with a Linked List implementation".
-//
-// Off restores the pre-existing behaviour (push into the chunk regardless of
-// where the cursor sits), which copies the chunk and loses tail identity.
-fn frontier_cons_enabled() -> bool {
-    static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *V.get_or_init(|| std::env::var("IM_LISTS_FRONTIER_CONS").as_deref() != Ok("false"))
-}
-
+// Aligned to 8 so `Link` has 3 tag bits on 32 bit targets too
+#[repr(align(8))]
 pub struct UnrolledCell<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> {
     pub(crate) storage: CellStorage<T>,
     pub(crate) next: Link<T, P, N, G>,
@@ -1109,22 +1004,16 @@ impl<T: Clone + std::fmt::Debug, P: PointerFamily, const N: u32, const G: u32> s
 impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, N, G> {
     const GROWTH_RATE: u32 = if G == 0 { 1 } else { G };
 
-    /// The chunk's contents. Every read and every mutation goes through this
-    /// surface, so a cell that stores its single element some other way only
-    /// has to be taught about it here.
     #[inline(always)]
     pub(crate) fn cap(&self) -> u32 {
         if self.is_inline() {
-            // Holds one and can take one more; the second element moves it out
-            // to a chunk, which is where a real capacity target comes back.
+            // Room for one more before it has to move to a chunk
             2
         } else {
             unsafe { self.storage.chunk.size }
         }
     }
 
-    /// This cell's cursor. An inline cell holds exactly one element, so it is
-    /// always at 1 - there is nowhere else for the cursor to be.
     #[inline(always)]
     pub(crate) fn index(&self) -> usize {
         if self.is_inline() {
@@ -1137,9 +1026,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
     #[inline(always)]
     pub(crate) fn set_index(&mut self, index: usize) {
         if self.is_inline() {
-            // An inline cell's cursor is implicitly 1, so writing 1 back is a
-            // no-op - `tail` does exactly that when it lands on a boundary.
-            // Anything else means the caller thinks this cell is a chunk.
+            // Inline cells are always at 1 - `tail` can set that on a boundary
             debug_assert_eq!(index, 1, "an inline cell holds exactly one element");
             return;
         }
@@ -1168,22 +1055,15 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
         &self.chunk().buffer
     }
 
-    /// Move an inline element back into a buffer. Every mutation goes through
-    /// `storage_mut`, so inline cells only ever have to answer reads.
+    // Move an inline value into a buffer, so that it can be mutated
     #[cold]
     fn deinline(&mut self) {
         debug_assert!(self.next.is_inline() && !self.next.is_moved());
         let value = unsafe { core::mem::ManuallyDrop::take(&mut self.storage.inline) };
-        // A cell deinlines because a second element is arriving, so it needs
-        // room for exactly two. Going through `grow_amortized` here would take
-        // the `grow_floor` of 4 and leave two dead slots on every such buffer -
-        // which, at a hundred million of them, is gigabytes.
+        // A second value is on the way, so make room for exactly two
         let cap = 2;
-        // The buffer only needs room for the two elements at hand, but the
-        // cell's capacity *target* has to keep climbing - pinning it at 2 caps
-        // every cell at two elements, which fragments a list into one small
-        // buffer per pair and kills the geometric schedule outright. A new cell
-        // is always the previous one grown, and the previous one is `next`.
+        // The capacity target still grows from the previous cell, otherwise
+        // every cell would stop at two elements
         let target = self
             .next
             .cell()
@@ -1210,8 +1090,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
         unsafe { &mut (*self.storage.chunk).buffer }
     }
 
-    /// Move the inline element out of a cell we own. Leaves the cell marked so
-    /// `Drop` will not touch the moved value.
+    // Move the inline value out, marking it so `Drop` skips it
     fn take_inline(&mut self) -> Option<T> {
         if !self.next.is_inline() || self.next.is_moved() {
             return None;
@@ -1265,7 +1144,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
 
     #[inline(always)]
     pub(crate) fn slot_is_unique(&self) -> bool {
-        // The element is owned outright; sharing of the cell is P's business.
+        // An inline value is owned by the cell
         self.is_inline() || self.storage().is_unique()
     }
 
@@ -1293,8 +1172,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
         self.storage_mut().pop()
     }
 
-    /// Drop everything past `len`. An inline cell holds a single element, so
-    /// any `len >= 1` already satisfies this.
     pub(crate) fn slot_truncate(&mut self, len: usize) {
         if self.is_inline() && len >= 1 {
             return;
@@ -1328,8 +1205,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
         Self::new_chunk(0, N, AtomicSharedVector::new(), None)
     }
 
-    /// A chunked cell. Everything but the inline case goes through here, so the
-    /// union is only ever built in one place.
     #[inline(always)]
     fn new_chunk(
         index: u32,
@@ -1349,9 +1224,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
         }
     }
 
-    /// A fresh one-element cell, holding its element inline. `size` stays the
-    /// capacity this cell would have allocated, so the buffer is only deferred
-    /// to the second element, not resized.
     #[inline(always)]
     fn new_inline(value: T, next: Option<UnrolledList<T, P, N, G>>) -> Self {
         UnrolledCell {
@@ -1385,7 +1257,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
     }
 
     fn advance_cursor(&self) -> Self {
-        // index > 1, so this cell holds more than one element and is not inline.
+        // index > 1, so this can't be an inline cell
         debug_assert!(!self.is_inline());
         let mut cell = Self::new_chunk(
             (self.index() - 1) as u32,
@@ -1411,37 +1283,22 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
         let size = cdr.size();
 
         let shared = P::strong_count(&cdr.0) > 1;
-        // Section 2.1 frontier test, as in `cons_mut`: a cursor behind LastUsed
-        // over a buffer someone else still holds must link to the tail rather
-        // than copy the chunk out from under it.
-        let behind_frontier = frontier_cons_enabled()
-            && (cdr.0.index() as usize) < cdr.elements().len()
-            && !cdr.0.slot_is_unique();
+        // Consing onto the tail of a longer list someone else can see, link to
+        // it instead of copying
+        let behind_frontier = cdr.0.index() < cdr.elements().len() && !cdr.0.slot_is_unique();
 
         if shared || behind_frontier || cdr.elements().len() > size as usize - 1 {
-            let grown = size * cons_growth(Self::GROWTH_RATE);
-            // An empty cdr is not a link - hanging the empty cell off the chain
-            // leaves a node with nothing in it, which `last` walks straight into.
-            // `slow_path_new_node` has always guarded this; this branch did not,
-            // and simply never saw an empty cdr until now.
+            // Don't link to an empty list
             let next = if cdr.is_empty() { None } else { Some(cdr) };
-            let cell = if inline_cells_enabled() {
-                Self::new_inline(value, next)
-            } else {
-                UnrolledCell::new_chunk(1, grown, crate::arc_vector![value], next)
-            };
-            UnrolledList(P::new(cell))
+            UnrolledList(P::new(Self::new_inline(value, next)))
         } else {
             let inner = P::make_mut(&mut cdr.0);
             // let elements = P::make_mut(&mut inner.elements);
 
-            // Push first: on an inline cell that is what moves it out to a
-            // chunk, and only a chunk has a cursor to bump.
-            // Reclaim an owned suffix first, so the push lands at the cursor
-            // rather than past it. (With the frontier test on, only a uniquely
-            // owned buffer can reach here behind the frontier.)
-            let idx = inner.index() as usize;
-            if frontier_cons_enabled() && idx < inner.slot_as_slice().len() {
+            // Drop anything past the cursor first. Then push before bumping the
+            // index, since the push is what moves an inline cell into a chunk
+            let idx = inner.index();
+            if idx < inner.slot_as_slice().len() {
                 inner.slot_truncate(idx);
             }
             inner.slot_push(value);
@@ -1477,7 +1334,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Iterator
                 // If we can, drop these values!
                 // if next.strong_count() == 1 && P::strong_count(&next.0.elements) == 1 {
                 if P::strong_count(&next.0) == 1 && next.0.slot_is_unique() {
-                    // self.cur = _self.0.next.clone_link();
+                    // self.cur = _self.0.next.clone();
                     self.cur = P::get_mut(&mut _self.0).and_then(|x| x.next.take());
                 } else {
                     self.cur = None
@@ -1504,7 +1361,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Iterator
 
         //     // If we can, drop these values!
         //     if next.strong_count() == 1 && P::strong_count(&next.0.elements) == 1 {
-        //         // self.cur = _self.0.next.clone_link();
+        //         // self.cur = _self.0.next.clone();
         //         // self.cur = P::get_mut(&mut _self.0).and_then(|x| x.next.take());
         //         // todo!()
 
@@ -1636,8 +1493,8 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Iterator
 
 //     fn next(&mut self) -> Option<Self::Item> {
 //         let value = self.list.car().cloned();
-//         if self.list.index() > 0 {
-//             self.list.set_index(self.list.index() - 1);
+//         if self.list.index > 0 {
+//             self.list.index -= 1;
 //             value
 //         } else {
 //             None
@@ -1885,25 +1742,23 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> FromIterator<Unroll
 
                     // Drop the useless elements
                     if left_inner.index() < left_inner.slot_len() {
-                        // left_vector.truncate(left_inner.index());
+                        // left_vector.truncate(left_inner.index);
 
-                        let li = left_inner.index() as usize;
-                        left_inner.slot_truncate(li);
+                        left_inner.slot_truncate(left_inner.index());
                     }
 
                     // TODO
                     if right_inner.index() < right_inner.slot_len() {
-                        // right_vector.truncate(right_inner.index());
+                        // right_vector.truncate(right_inner.index);
 
-                        let ri = right_inner.index() as usize;
-                        right_inner.slot_truncate(ri);
+                        right_inner.slot_truncate(right_inner.index());
                     }
 
                     // Perform the actual move of the values
                     // right_vector.append(left_vector);
 
-                    let taken = std::mem::take(left_inner.storage_mut());
-                    right_inner.storage_mut().append(&mut { taken });
+                    let mut taken = std::mem::take(left_inner.storage_mut());
+                    right_inner.storage_mut().append(&mut taken);
 
                     // Swap the locations now after we've done the update
                     std::mem::swap(left_inner.storage_mut(), right_inner.storage_mut());
@@ -2593,11 +2448,7 @@ mod reference_counting_correctness {
         assert_eq!(result.strong_count(), 1);
     }
 
-    // A chunked cell dropped on its own - as `cdr_mut` does when it steps past
-    // one - has to release its buffer and the elements in it. It used to drop
-    // only the `ChunkHead`, whose buffer is `ManuallyDrop`, so every element
-    // stayed alive and the buffer leaked: a Steel loop walking a fresh list
-    // with `cdr` leaked the whole list each time.
+    // Dropping cells one at a time with `cdr_mut` should release the buffers
     #[test]
     fn cdr_mut_releases_chunk_buffers() {
         let tracked = std::rc::Rc::new(());
@@ -2624,6 +2475,7 @@ mod reference_counting_correctness {
 }
 
 #[cfg(test)]
+#[cfg(target_pointer_width = "64")]
 mod split_layout {
     use super::*;
 

@@ -79,8 +79,7 @@ pub struct RawCell<
     D: DropHandler<GenericList<T, P, N, G, D>>,
 >(*const UnrolledCell<T, P, N, G>, PhantomData<D>);
 
-// Derived `Copy`/`Clone` would demand the type parameters be `Copy`, which a
-// raw pointer wrapper has no reason to care about.
+// Implemented by hand - deriving would require the type parameters to be Copy
 impl<
         T: Clone,
         P: PointerFamily,
@@ -132,46 +131,42 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
         self.0.strong_count()
     }
 
+    /// Size of the header in front of a shared vector's elements
     pub const fn vector_header_size() -> usize {
         AtomicSharedVector::<T>::header_size()
     }
 
-    /// Byte offsets of the cell fields, measured from the cell itself. Generated
-    /// code reads list cells by raw offset, so it takes these from the type
-    /// rather than assuming a layout.
-    /// Where the inline element sits - the head of the cell itself.
+    /// Offset of the cell's storage. On an inline cell this is the element itself
     pub const fn cell_elements_offset() -> usize {
         core::mem::offset_of!(crate::unrolled::UnrolledCell<T, P, N, G>, storage)
     }
 
-    /// The chunk fields live in the same bytes, so they are all relative to the
-    /// head. Reading any of them on an inline cell reads the element instead.
+    /// Offset of the chunk's index. Only meaningful on a chunked cell
     pub const fn cell_index_offset() -> usize {
         Self::cell_elements_offset() + core::mem::offset_of!(crate::unrolled::ChunkHead<T>, index)
     }
 
+    /// Offset of the chunk's size. Only meaningful on a chunked cell
     pub const fn cell_size_offset() -> usize {
         Self::cell_elements_offset() + core::mem::offset_of!(crate::unrolled::ChunkHead<T>, size)
     }
 
+    /// Offset of the chunk's buffer. Only meaningful on a chunked cell
     pub const fn cell_buffer_offset() -> usize {
         Self::cell_elements_offset() + core::mem::offset_of!(crate::unrolled::ChunkHead<T>, buffer)
     }
 
-    /// Where the link to the next cell lives. The storage discriminant rides in
-    /// its low bit, so generated code reads the flag from here.
+    /// Offset of the link to the next cell. Its low bits hold the tags
     pub const fn cell_next_offset() -> usize {
         core::mem::offset_of!(crate::unrolled::UnrolledCell<T, P, N, G>, next)
     }
 
-    /// Set in the low bit of `next` when the cell's single element lives in the
-    /// storage field itself rather than in a separately allocated chunk.
+    /// Tag set on `next` when the cell holds its single element inline
     pub const fn cell_inline_flag() -> usize {
         crate::unrolled::INLINE_TAG
     }
 
-    /// Every bit of `next` that is a tag rather than part of the pointer.
-    /// Generated code masks these off to ask whether a next cell exists.
+    /// Mask of the tag bits in `next`
     pub const fn cell_next_tag_mask() -> usize {
         crate::unrolled::LINK_TAG_MASK
     }
@@ -243,7 +238,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     pub fn draining_iterator(
         mut self,
         // default: UnrolledList<T, P, N, G>,
-    ) -> Option<impl Iterator<Item = T>> {
+    ) -> impl Iterator<Item = T> {
         std::mem::take(&mut self.0).draining_iterator()
         // std::mem::replace(&mut self.0, default).draining_iterator()
         // todo!()
@@ -295,24 +290,23 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
         Self(UnrolledList(P::from_raw(cell.0)), PhantomData)
     }
 
-    /// Where this list's cursor currently sits inside its cell.
+    /// Get the position of the cursor within the current cell
     #[doc(hidden)]
     pub fn cursor_index(&self) -> usize {
         self.0.index()
     }
 
-    /// The next cell in the chain, or `None` at the end.
+    /// Get the next cell, or `None` if this is the last one
     #[doc(hidden)]
     pub fn next_cell(&self) -> Option<RawCell<T, P, N, G, D>> {
         self.0.next_cell_ptr().map(|p| RawCell(p, PhantomData))
     }
 
-    /// `from_raw_with_index` for a caller that only has a bare pointer, which
-    /// is all generated code carries.
+    /// Same as `from_raw_with_index`, but from a bare pointer
     ///
     /// # Safety
-    /// `ptr` must be a cell pointer as returned from `as_ptr` / `next_cell`,
-    /// still reachable, and `index` a position that cursor reached.
+    /// `ptr` must be a valid pointer as returned from `as_ptr` or `next_cell`,
+    /// and `index` must be a position the cursor reached
     #[doc(hidden)]
     pub unsafe fn from_raw_parts(ptr: *const u8, index: usize) -> Self {
         let cell = RawCell(
@@ -322,18 +316,14 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
         unsafe { Self::from_raw_with_index(cell, index) }
     }
 
-    /// `from_raw_parts`, for a caller that owns the list the cursor walked
-    /// from and is giving it up. Where that list's cells are uniquely owned
-    /// they are reused the way `cdr_mut` would - stepped past for free, the
-    /// target repositioned in place - instead of copying the target cell
-    /// because `self` still shares it.
+    /// Same as `from_raw_parts`, but consumes the list the cursor was walked from.
+    /// Uniquely owned cells are reused in place rather than copied, like `cdr_mut`
     ///
     /// # Safety
-    /// As `from_raw_parts`, and the cursor must have been walked from `self`.
+    /// Same as `from_raw_parts`, and the cursor must have been walked from `self`
     #[doc(hidden)]
     pub unsafe fn reposition_from_raw_parts(self, ptr: *const u8, index: usize) -> Self {
-        // Take the list out without running the drop handler on an emptied
-        // shell - that costs a thread-local lookup per call.
+        // Skip the drop handler - it would only run on an empty shell
         let this = core::mem::ManuallyDrop::new(self);
         let owned = unsafe { core::ptr::read(&this.0) };
         match owned.reposition(
@@ -343,24 +333,19 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
             Ok(list) => GenericList(list, PhantomData),
             Err(held) => {
                 let out = unsafe { Self::from_raw_parts(ptr, index) };
-                // Only now: `held` is what keeps the target cell alive.
+                // `held` keeps the target cell alive until we've cloned it
                 drop(GenericList::<T, P, N, G, D>(held, PhantomData));
                 out
             }
         }
     }
 
-    /// Rebuild a list from a cursor that generated code has been walking in
-    /// registers: the cell it currently sits in, and the position within it.
-    ///
-    /// The caller's reference is left alone - this takes its own - so the cell
-    /// must still be reachable, which it is as long as the head of the list is
-    /// live somewhere. Costs one cell copy when the cursor has moved off the
-    /// cell's own position, and nothing when it has not.
+    /// Construct a list from a cell and a cursor position within it. Takes a new
+    /// reference to the cell, and copies it if `index` differs from its own
     ///
     /// # Safety
     /// `cell` must be a valid pointer as returned from `as_ptr`, and `index`
-    /// must be a position that cursor actually reached.
+    /// must be a position the cursor reached
     #[doc(hidden)]
     pub unsafe fn from_raw_with_index(cell: RawCell<T, P, N, G, D>, index: usize) -> Self {
         let borrowed = core::mem::ManuallyDrop::new(unsafe { Self::from_raw(cell) });
@@ -1773,7 +1758,7 @@ mod arc_tests {
     fn consuming_iter_with_no_references() {
         let list = vlist![0, 1, 2, 3, 4, 5, 6, 7, 8];
 
-        let result = list.draining_iterator().unwrap().collect::<Vec<_>>();
+        let result = list.draining_iterator().collect::<Vec<_>>();
 
         assert_eq!(vec![0, 1, 2, 3, 4, 5, 6, 7, 8], result);
     }
@@ -1783,7 +1768,7 @@ mod arc_tests {
         let list = vlist![0, 1, 2, 3, 4, 5, 6, 7, 8];
         let _second_list = list.cdr();
 
-        let result = list.draining_iterator().unwrap().collect::<Vec<_>>();
+        let result = list.draining_iterator().collect::<Vec<_>>();
 
         assert_eq!(Vec::<usize>::new(), result);
     }
@@ -2022,6 +2007,177 @@ mod cursor_tests {
                     }
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod pop_front_tests {
+    use crate::list::List;
+
+    #[test]
+    fn pop_front_after_cdr() {
+        let list: List<usize> = (0..8).collect();
+        let mut tail = list.cdr().unwrap();
+
+        assert_eq!(tail.pop_front(), Some(1));
+        assert_eq!(tail, (2..8).collect::<List<_>>());
+        assert_eq!(list, (0..8).collect::<List<_>>());
+    }
+
+    #[test]
+    fn pop_front_after_cdr_unique() {
+        let mut list: List<usize> = (0..8).collect();
+        list.cdr_mut();
+
+        assert_eq!(list.pop_front(), Some(1));
+        assert_eq!(list, (2..8).collect::<List<_>>());
+    }
+
+    fn shapes(len: usize) -> Vec<List<usize>> {
+        let collected: List<usize> = (0..len).collect();
+        let mut consed = List::new();
+        for i in (0..len).rev() {
+            consed.cons_mut(i);
+        }
+        let mut appended: List<usize> = (0..len / 2).collect();
+        appended.append_mut((len / 2..len).collect());
+        vec![collected, consed, appended]
+    }
+
+    /// Popping everything off must give the same values as iterating,
+    /// whether or not anyone else holds on to the list
+    #[test]
+    fn pop_front_drains_in_order() {
+        for len in 0..40usize {
+            for keep_shared in [false, true] {
+                for mut list in shapes(len) {
+                    let witness = keep_shared.then(|| list.clone());
+                    let want: Vec<usize> = list.iter().copied().collect();
+
+                    let mut got = Vec::new();
+                    while let Some(value) = list.pop_front() {
+                        got.push(value);
+                    }
+
+                    assert_eq!(got, want, "len {len}, shared {keep_shared}");
+                    assert!(list.is_empty());
+                    if let Some(w) = witness {
+                        assert_eq!(w.iter().copied().collect::<Vec<_>>(), want);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod cursor_proptests {
+    use crate::list::GenericList;
+    use crate::shared::RcPointer;
+    use proptest::prelude::*;
+
+    type L<const N: u32, const G: u32> = GenericList<usize, RcPointer, N, G>;
+
+    #[derive(Debug, Clone)]
+    enum Build {
+        Cons(usize),
+        Cdr,
+        Append(Vec<usize>),
+        PushBack(usize),
+    }
+
+    fn build_strategy() -> impl Strategy<Value = Vec<Build>> {
+        prop::collection::vec(
+            prop_oneof![
+                4 => any::<usize>().prop_map(Build::Cons),
+                2 => Just(Build::Cdr),
+                1 => prop::collection::vec(any::<usize>(), 0..20).prop_map(Build::Append),
+                1 => any::<usize>().prop_map(Build::PushBack),
+            ],
+            0..60,
+        )
+    }
+
+    // Build a list, optionally keeping every intermediate version alive so
+    // that its cells end up shared
+    fn build<const N: u32, const G: u32>(ops: Vec<Build>, keep: &mut Vec<L<N, G>>) -> L<N, G> {
+        let mut list = L::<N, G>::new();
+        for op in ops {
+            match op {
+                Build::Cons(value) => list.cons_mut(value),
+                Build::Cdr => list = list.cdr().unwrap_or_default(),
+                Build::Append(values) => list.append_mut(values.into_iter().collect()),
+                Build::PushBack(value) => list.push_back(value),
+            }
+            keep.push(list.clone());
+        }
+        list
+    }
+
+    /// Walking a list as a raw (cell, index) cursor and then materializing it
+    /// must give the same list as the equivalent chain of `cdr`s
+    fn check_cursor<const N: u32, const G: u32>(ops: Vec<Build>, steps: usize, keep_shared: bool) {
+        let mut keep = Vec::new();
+        let head = build::<N, G>(ops, &mut keep);
+        if !keep_shared {
+            keep.clear();
+        }
+
+        let values: Vec<usize> = head.iter().copied().collect();
+        if values.is_empty() {
+            return;
+        }
+        let steps = steps % values.len();
+
+        let mut cell = head.as_ptr();
+        let mut index = head.cursor_index();
+        for _ in 0..steps {
+            if index > 1 {
+                index -= 1;
+            } else {
+                cell = unsafe { L::<N, G>::call_from_raw(cell, |l| l.next_cell()) }
+                    .expect("next cell");
+                index = unsafe { L::<N, G>::call_from_raw(cell, |l| l.cursor_index()) };
+            }
+        }
+        let want = &values[steps..];
+
+        let materialized = unsafe { L::<N, G>::from_raw_with_index(cell, index) };
+        assert!(
+            Iterator::eq(materialized.iter(), want.iter()),
+            "from_raw_with_index"
+        );
+
+        let repositioned = unsafe { head.reposition_from_raw_parts(cell.0 as *const u8, index) };
+        assert!(Iterator::eq(repositioned.iter(), want.iter()), "reposition");
+
+        // Other owners must not have been disturbed
+        drop(materialized);
+        for list in &keep {
+            assert!(list.iter().count() == list.len());
+        }
+        drop(keep);
+        assert!(
+            Iterator::eq(repositioned.iter(), want.iter()),
+            "reposition after drop"
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn cursor_matches_cdr_chain_unrolled(ops in build_strategy(), steps in any::<usize>(), keep_shared in any::<bool>()) {
+            check_cursor::<256, 1>(ops, steps, keep_shared);
+        }
+
+        #[test]
+        fn cursor_matches_cdr_chain_vlist(ops in build_strategy(), steps in any::<usize>(), keep_shared in any::<bool>()) {
+            check_cursor::<4, 2>(ops, steps, keep_shared);
+        }
+
+        #[test]
+        fn cursor_matches_cdr_chain_steel(ops in build_strategy(), steps in any::<usize>(), keep_shared in any::<bool>()) {
+            check_cursor::<1, 2>(ops, steps, keep_shared);
         }
     }
 }

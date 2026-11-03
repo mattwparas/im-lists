@@ -130,11 +130,6 @@ pub unsafe fn drop_items<T>(mut ptr: *mut T, count: u32) {
 }
 
 pub unsafe fn dealloc<T, R, A: Allocator>(mut ptr: NonNull<Header<R, A>>, cap: BufferSize) {
-    if cap_probe_enabled() {
-        use core::sync::atomic::Ordering::Relaxed;
-        LIVE_BUFS.fetch_sub(1, Relaxed);
-        LIVE_CAP.fetch_sub(cap as i64, Relaxed);
-    }
     let layout = buffer_layout::<Header<R, A>, T>(cap as usize).unwrap();
     let allocator = ptr::read(&ptr.as_mut().allocator);
     allocator.deallocate(ptr.cast::<u8>(), layout);
@@ -282,34 +277,15 @@ pub fn assert_ref_count_layout<R>() {
     assert_eq!(mem::align_of::<R>(), mem::align_of::<i32>());
 }
 
-// TEMPORARY: live buffer capacity accounting.
-pub static LIVE_BUFS: core::sync::atomic::AtomicI64 = core::sync::atomic::AtomicI64::new(0);
-pub static LIVE_CAP: core::sync::atomic::AtomicI64 = core::sync::atomic::AtomicI64::new(0);
-pub static ALLOC_CALLS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
-
-/// Bytes the allocator puts in front of a buffer's slots.
-pub fn buffer_header_bytes<T>() -> usize {
-    header_size::<Header<AtomicRefCount, crate::shared_vector::alloc::Global>, T>()
-}
-
-pub fn cap_probe_enabled() -> bool {
-    static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *V.get_or_init(|| std::env::var_os("IM_LISTS_CAP_PROBE").is_some())
-}
-
 #[inline(never)]
 pub fn allocate_header_buffer<T, A>(
-    mut cap: usize,
+    cap: usize,
     allocator: &A,
 ) -> Result<(NonNull<u8>, usize), AllocError>
 where
     A: Allocator,
 {
-    // An empty buffer allocates the header and nothing else. Rounding zero up
-    // to a real capacity means every empty shared vector carries 16 slots it
-    // never uses, and `RefCountedVector::new` documents itself as allocating
-    // no memory at all.
-    let _ = &mut cap;
+    // A capacity of 0 allocates just the header
 
     if cap > BufferSize::MAX as usize {
         return Err(alloc_error_cold());
@@ -324,25 +300,6 @@ where
     } else {
         items_size / size_of
     };
-
-    if cap_probe_enabled() {
-        use core::sync::atomic::Ordering::Relaxed;
-        LIVE_BUFS.fetch_add(1, Relaxed);
-        LIVE_CAP.fetch_add(real_capacity as i64, Relaxed);
-        let n = ALLOC_CALLS.fetch_add(1, Relaxed) + 1;
-        let interval: u64 = std::env::var("IM_LISTS_CAP_EVERY")
-            .ok()
-            .and_then(|x| x.parse().ok())
-            .unwrap_or(50_000_000);
-        if n % interval == 0 {
-            eprintln!(
-                "cap-probe: live_buffers={} live_capacity_slots={} avg_cap={:.2}",
-                LIVE_BUFS.load(Relaxed),
-                LIVE_CAP.load(Relaxed),
-                LIVE_CAP.load(Relaxed) as f64 / LIVE_BUFS.load(Relaxed).max(1) as f64
-            );
-        }
-    }
 
     Ok((allocation.cast(), real_capacity))
 }

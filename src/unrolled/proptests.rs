@@ -1,99 +1,170 @@
 use proptest::prelude::*;
+use std::cell::Cell;
+
+thread_local! {
+    static LIVE: Cell<isize> = const { Cell::new(0) };
+}
+
+fn live_count() -> isize {
+    LIVE.with(|live| live.get())
+}
+
+// A value that counts how many copies of it are alive, so that we can check
+// the list neither leaks nor double drops its elements
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Tracked(usize);
+
+impl Tracked {
+    fn new(value: usize) -> Self {
+        LIVE.with(|live| live.set(live.get() + 1));
+        Tracked(value)
+    }
+}
+
+impl Clone for Tracked {
+    fn clone(&self) -> Self {
+        Tracked::new(self.0)
+    }
+}
+
+impl Drop for Tracked {
+    fn drop(&mut self) {
+        LIVE.with(|live| live.set(live.get() - 1));
+    }
+}
 
 // Generate arbitrary sequence of manipulations to both a vector and a list
 // Apply those manipulations in order, then check that the state of both is the same
 // If the state of the resulting is the same AND the invariants of the list hold, we're good
+//
+// Snapshots keep old versions of the list alive, so that later operations run
+// against shared structure. Every snapshot is checked against the model at the end
 #[derive(Debug, Clone)]
 enum Action {
     Cons(usize),
+    ConsFunctional(usize),
     Cdr,
+    CdrMut,
     Append(Vec<usize>),
+    AppendList(Vec<usize>),
+    AppendSnapshot(usize),
     Reverse,
     PushBack(usize),
     PopFront,
     Get(usize),
-    Clone,
+    Car,
+    Last,
+    Len,
+    Take(usize),
+    Tail(usize),
+    Sort,
+    Snapshot,
+    Restore(usize),
+    DropSnapshot(usize),
+    ConsumeAndRebuild,
+}
+
+#[derive(Default)]
+struct VecModel {
+    current: Vec<usize>,
+    snapshots: Vec<Vec<usize>>,
+    observed: Vec<Option<usize>>,
 }
 
 impl Action {
-    fn act_on_vector(
-        self,
-        mut vec: Vec<usize>,
-        fetch_values: &mut Vec<Option<usize>>,
-    ) -> Vec<usize> {
+    fn act_on_vector(self, model: &mut VecModel) {
+        let vec = &mut model.current;
         match self {
-            Action::Cons(value) => {
-                vec.insert(0, value);
-                vec
-            }
-            Action::Cdr => {
-                if vec.len() == 0 {
-                    vec
-                } else {
+            Action::Cons(value) | Action::ConsFunctional(value) => vec.insert(0, value),
+            Action::Cdr | Action::CdrMut => {
+                if !vec.is_empty() {
                     vec.remove(0);
-                    vec
                 }
             }
-            Action::Append(mut right) => {
-                vec.append(&mut right);
-                vec
+            Action::Append(mut right) | Action::AppendList(mut right) => vec.append(&mut right),
+            Action::AppendSnapshot(i) => {
+                if !model.snapshots.is_empty() {
+                    let snapshot = model.snapshots[i % model.snapshots.len()].clone();
+                    vec.extend(snapshot);
+                }
             }
-            Action::Reverse => {
-                vec.reverse();
-                vec
-            }
-            Action::PushBack(value) => {
-                vec.push(value);
-                vec
-            }
+            Action::Reverse => vec.reverse(),
+            Action::PushBack(value) => vec.push(value),
             Action::PopFront => {
-                if vec.len() == 0 {
-                    vec
+                let popped = if vec.is_empty() {
+                    None
                 } else {
-                    vec.remove(0);
-                    vec
+                    Some(vec.remove(0))
+                };
+                model.observed.push(popped);
+            }
+            Action::Get(i) => model.observed.push(vec.get(i).copied()),
+            Action::Car => model.observed.push(vec.first().copied()),
+            Action::Last => model.observed.push(vec.last().copied()),
+            Action::Len => model.observed.push(Some(vec.len())),
+            Action::Take(count) => vec.truncate(count),
+            Action::Tail(count) => {
+                if count <= vec.len() {
+                    vec.drain(..count);
                 }
             }
-            Action::Get(i) => {
-                fetch_values.push(vec.get(i).cloned());
-                vec
+            Action::Sort => vec.sort(),
+            Action::Snapshot => model.snapshots.push(vec.clone()),
+            Action::Restore(i) => {
+                if !model.snapshots.is_empty() {
+                    *vec = model.snapshots[i % model.snapshots.len()].clone();
+                }
             }
-            Action::Clone => vec,
+            Action::DropSnapshot(i) => {
+                if !model.snapshots.is_empty() {
+                    let i = i % model.snapshots.len();
+                    model.snapshots.remove(i);
+                }
+            }
+            Action::ConsumeAndRebuild => {
+                model.observed.extend(vec.iter().copied().map(Some));
+                model.observed.push(None);
+            }
         }
     }
 }
 
-fn crunch_actions_for_vec(
-    initial: Vec<usize>,
-    actions: Vec<Action>,
-    fetch_values: &mut Vec<Option<usize>>,
-) -> Vec<usize> {
-    actions.into_iter().fold(initial, |vec, action| {
-        action.act_on_vector(vec, fetch_values)
-    })
-}
-
 fn action_strategy() -> impl Strategy<Value = Action> {
     prop_oneof![
-        any::<usize>().prop_map(Action::Cons),
-        Just(Action::Cdr),
-        prop::collection::vec(0..100usize, 0..100)
-            .prop_map(|x| Action::Append(x.into_iter().collect())),
-        Just(Action::Reverse),
-        any::<usize>().prop_map(Action::PushBack),
-        Just(Action::PopFront),
+        3 => any::<usize>().prop_map(Action::Cons),
+        2 => any::<usize>().prop_map(Action::ConsFunctional),
+        2 => Just(Action::Cdr),
+        2 => Just(Action::CdrMut),
+        1 => prop::collection::vec(0..100usize, 0..100).prop_map(Action::Append),
+        1 => prop::collection::vec(0..100usize, 0..20).prop_map(Action::AppendList),
+        1 => any::<usize>().prop_map(Action::AppendSnapshot),
+        1 => Just(Action::Reverse),
+        1 => any::<usize>().prop_map(Action::PushBack),
+        2 => Just(Action::PopFront),
         // Getting values should work...
-        (0..100usize).prop_map(Action::Get),
-        Just(Action::Clone),
+        1 => (0..100usize).prop_map(Action::Get),
+        1 => Just(Action::Car),
+        1 => Just(Action::Last),
+        1 => Just(Action::Len),
+        1 => (0..300usize).prop_map(Action::Take),
+        1 => (0..300usize).prop_map(Action::Tail),
+        1 => Just(Action::Sort),
+        2 => Just(Action::Snapshot),
+        1 => any::<usize>().prop_map(Action::Restore),
+        1 => any::<usize>().prop_map(Action::DropSnapshot),
+        1 => Just(Action::ConsumeAndRebuild),
     ]
 }
 
+// Miri is far slower, so keep the inputs small there
 fn actions_strategy() -> impl Strategy<Value = Vec<Action>> {
-    prop::collection::vec(action_strategy(), 0..10)
+    let len = if cfg!(miri) { 0..15 } else { 0..40 };
+    prop::collection::vec(action_strategy(), len)
 }
 
 fn vec_strategy() -> impl Strategy<Value = Vec<usize>> {
-    prop::collection::vec(0..10000usize, 0..256 * 3)
+    let len = if cfg!(miri) { 0..40 } else { 0..256 * 3 };
+    prop::collection::vec(0..10000usize, len)
 }
 
 macro_rules! run_property_tests {
@@ -103,8 +174,6 @@ mod $name {
 
 use proptest::prelude::*;
 
-// use super::*;
-use crate::shared::RcPointer;
 
 use super::*;
 
@@ -118,50 +187,87 @@ fn list_strategy_from_iterator() -> impl Strategy<Value = List<isize>> {
 }
 
 
-fn act_on_list(context: &mut ListContext, action: Action, mut list: List<usize>, fetch_values: &mut Vec<Option<usize>>) -> List<usize> {
-    // println!("Action: {:?}, List: {:?}", self, list);
+struct ListModel {
+    current: List<Tracked>,
+    snapshots: Vec<List<Tracked>>,
+    observed: Vec<Option<usize>>,
+}
+
+fn act_on_list(model: &mut ListModel, action: Action) {
+    let list = &mut model.current;
     match action {
-        Action::Cons(value) => {
-            list.cons_mut(value);
-            list
+        Action::Cons(value) => list.cons_mut(Tracked::new(value)),
+        Action::ConsFunctional(value) => {
+            *list = List::cons(Tracked::new(value), std::mem::take(list));
         }
-        Action::Cdr => list.cdr().unwrap_or(List::new()),
-        Action::Append(right) => {
-            list.extend(right);
-            list
+        Action::Cdr => *list = list.cdr().unwrap_or_default(),
+        Action::CdrMut => {
+            list.cdr_mut();
         }
-        Action::Reverse => list.reverse(),
-        Action::PushBack(value) => {
-            list.push_back(value);
-            list
+        Action::Append(right) => list.extend(right.into_iter().map(Tracked::new)),
+        Action::AppendList(right) => list.append_mut(right.into_iter().map(Tracked::new).collect()),
+        Action::AppendSnapshot(i) => {
+            if !model.snapshots.is_empty() {
+                let snapshot = model.snapshots[i % model.snapshots.len()].clone();
+                list.append_mut(snapshot);
+            }
         }
-        Action::PopFront => {
-            list.pop_front();
-            list
+        Action::Reverse => *list = std::mem::take(list).reverse(),
+        Action::PushBack(value) => list.push_back(Tracked::new(value)),
+        Action::PopFront => model.observed.push(list.pop_front().map(|x| x.0)),
+        Action::Get(i) => model.observed.push(list.get(i).map(|x| x.0)),
+        Action::Car => model.observed.push(list.car().map(|x| x.0)),
+        Action::Last => model.observed.push(list.last().map(|x| x.0)),
+        Action::Len => model.observed.push(Some(list.len())),
+        Action::Take(count) => *list = list.take(count),
+        Action::Tail(count) => {
+            if let Some(tail) = list.tail(count) {
+                *list = tail;
+            }
         }
-        Action::Get(value) => {
-            fetch_values.push(list.get(value).cloned());
-            list
+        Action::Sort => list.sort(),
+        Action::Snapshot => model.snapshots.push(list.clone()),
+        Action::Restore(i) => {
+            if !model.snapshots.is_empty() {
+                *list = model.snapshots[i % model.snapshots.len()].clone();
+            }
         }
-        Action::Clone => {
-            context.lists.push(list.clone());
-            list
+        Action::DropSnapshot(i) => {
+            if !model.snapshots.is_empty() {
+                let i = i % model.snapshots.len();
+                model.snapshots.remove(i);
+            }
+        }
+        Action::ConsumeAndRebuild => {
+            let values: Vec<Tracked> = std::mem::take(list).into_iter().collect();
+            model.observed.extend(values.iter().map(|x| Some(x.0)));
+            model.observed.push(None);
+            *list = values.into_iter().collect();
         }
     }
 }
 
-struct ListContext{
-    lists: Vec<List<usize>>
+// Check a list against its model through every way of reading it
+fn assert_matches(list: &List<Tracked>, expected: &[usize], what: &str) {
+    list.assert_invariants();
+    assert_eq!(list.len(), expected.len(), "{what}: len");
+    assert!(
+        Iterator::eq(list.iter().map(|x| x.0), expected.iter().copied()),
+        "{what}: iter"
+    );
+    assert_eq!(list.last().map(|x| x.0), expected.last().copied(), "{what}: last");
+
+    let mut walked = Vec::new();
+    let mut cur = Some(list.clone());
+    while let Some(node) = cur {
+        match node.car() {
+            Some(value) => walked.push(value.0),
+            None => break,
+        }
+        cur = node.cdr();
+    }
+    assert_eq!(walked, expected, "{what}: cdr walk");
 }
-
-fn crunch_actions_for_list(context: &mut ListContext, initial: List<usize>, actions: Vec<Action>, fetch_values: &mut Vec<Option<usize>>) -> List<usize> {
-    actions.into_iter().fold(initial, |list, action| {
-        let res = act_on_list(context, action, list, fetch_values);
-        res
-    })
-}
-
-
 
 proptest! {
     // The next line modifies the number of tests.
@@ -293,21 +399,36 @@ proptest! {
 }
 
 fn random_test_runner(vec: Vec<usize>, actions: Vec<Action>) {
-    let initial_list: List<usize> = vec.clone().into_iter().collect();
+    let baseline = live_count();
 
-    let mut fetch_values_list = Vec::new();
-    let mut fetch_values_vec = Vec::new();
+    {
+        let mut list_model = ListModel {
+            current: vec.iter().copied().map(Tracked::new).collect(),
+            snapshots: Vec::new(),
+            observed: Vec::new(),
+        };
+        let mut vec_model = VecModel {
+            current: vec,
+            ..Default::default()
+        };
 
-    let mut context = ListContext { lists: Vec::new() };
+        // Compare after every step, so a failure points at the action that caused it
+        for (step, action) in actions.into_iter().enumerate() {
+            let what = format!("step {step} ({action:?})");
+            act_on_list(&mut list_model, action.clone());
+            action.act_on_vector(&mut vec_model);
 
-    let resulting_list = crunch_actions_for_list(&mut context, initial_list, actions.clone(), &mut fetch_values_list);
-    let resulting_vector = crunch_actions_for_vec(vec, actions, &mut fetch_values_vec);
+            assert_eq!(list_model.observed, vec_model.observed, "{what}: observed values");
+            assert_matches(&list_model.current, &vec_model.current, &what);
+        }
 
-    resulting_list.assert_invariants();
+        assert_eq!(list_model.snapshots.len(), vec_model.snapshots.len());
+        for (i, (list, vec)) in list_model.snapshots.iter().zip(&vec_model.snapshots).enumerate() {
+            assert_matches(list, vec, &format!("snapshot {i}"));
+        }
+    }
 
-    assert_eq!(fetch_values_list, fetch_values_vec);
-
-    assert!(Iterator::eq(resulting_list.iter(), resulting_vector.iter()));
+    assert_eq!(live_count(), baseline, "values leaked or dropped twice");
 }
 
 fn cdr_returns_smaller_vec(vec: Vec<usize>) {
@@ -556,6 +677,18 @@ fn test_case_with_pop_front() {
 }
 
 #[test]
+fn take_at_cell_boundary() {
+    let list: List<usize> = (0..300).collect();
+
+    for count in 0..=300 {
+        let taken = list.take(count);
+        taken.assert_invariants();
+        assert_eq!(taken.len(), count, "take({count}) len");
+        assert_eq!(taken.last(), count.checked_sub(1).as_ref(), "take({count}) last");
+    }
+}
+
+#[test]
 fn append_zero_then_cdr() {
     use Action::*;
 
@@ -581,8 +714,13 @@ fn append_zero_then_popfront() {
     }
 }
 
-run_property_tests!(unrolled_linked_list, crate::unrolled::UnrolledList<T, RcPointer, 256, 1>);
+run_property_tests!(unrolled_linked_list, crate::unrolled::UnrolledList<T, crate::shared::RcPointer, 256, 1>);
 
-run_property_tests!(vlist, crate::unrolled::UnrolledList<T, RcPointer, 4, 2>);
+run_property_tests!(vlist, crate::unrolled::UnrolledList<T, crate::shared::RcPointer, 4, 2>);
 
-run_property_tests!(vlist_growth_rate_4, crate::unrolled::UnrolledList<T, RcPointer, 4, 4>);
+run_property_tests!(vlist_growth_rate_4, crate::unrolled::UnrolledList<T, crate::shared::RcPointer, 4, 4>);
+
+// Steel's configuration
+run_property_tests!(vlist_steel, crate::unrolled::UnrolledList<T, crate::shared::RcPointer, 1, 2>);
+
+run_property_tests!(vlist_arc, crate::unrolled::UnrolledList<T, crate::shared::ArcPointer, 4, 2>);
