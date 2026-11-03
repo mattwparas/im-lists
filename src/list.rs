@@ -1809,7 +1809,7 @@ mod vlist_shared_tests {
     use crate::list::GenericList;
     use crate::shared::RcPointer;
 
-    // Steel's configuration
+    // steel's configuration
     type V<T> = GenericList<T, RcPointer, 1, 2>;
 
     #[test]

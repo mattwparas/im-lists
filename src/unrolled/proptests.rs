@@ -720,7 +720,7 @@ run_property_tests!(vlist, crate::unrolled::UnrolledList<T, crate::shared::RcPoi
 
 run_property_tests!(vlist_growth_rate_4, crate::unrolled::UnrolledList<T, crate::shared::RcPointer, 4, 4>);
 
-// Steel's configuration
+// steel's configuration
 run_property_tests!(vlist_steel, crate::unrolled::UnrolledList<T, crate::shared::RcPointer, 1, 2>);
 
 run_property_tests!(vlist_arc, crate::unrolled::UnrolledList<T, crate::shared::ArcPointer, 4, 2>);
