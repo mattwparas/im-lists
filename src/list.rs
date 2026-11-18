@@ -10,13 +10,16 @@
 //! Using the mutable functions when possible enables in place mutation. Much of the internal structure is shared,
 //! so even immutable functions can be fast, but the mutable functions will be faster.
 
-use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData};
+use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData, mem::ManuallyDrop};
 
 use crate::{
     handler::{DefaultDropHandler, DropHandler},
     shared::{ArcPointer, PointerFamily, RcPointer},
     shared_vector::AtomicSharedVector,
-    unrolled::{ConsumingWrapper, IterWrapper, UnrolledCell, UnrolledList},
+    unrolled::{
+        list_from_cell, ChunkHead, ConsumingWrapper, IterWrapper, UnrolledCell, UnrolledList,
+        INLINE_TAG, LINK_TAG_MASK,
+    },
 };
 
 /// A persistent list.
@@ -132,43 +135,51 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     }
 
     /// Size of the header in front of a shared vector's elements
+    #[doc(hidden)]
     pub const fn vector_header_size() -> usize {
         AtomicSharedVector::<T>::header_size()
     }
 
     /// Offset of the cell's storage. On an inline cell this is the element itself
+    #[doc(hidden)]
     pub const fn cell_elements_offset() -> usize {
-        core::mem::offset_of!(crate::unrolled::UnrolledCell<T, P, N, G>, storage)
+        std::mem::offset_of!(UnrolledCell<T, P, N, G>, storage)
     }
 
     /// Offset of the chunk's index. Only meaningful on a chunked cell
+    #[doc(hidden)]
     pub const fn cell_index_offset() -> usize {
-        Self::cell_elements_offset() + core::mem::offset_of!(crate::unrolled::ChunkHead<T>, index)
+        Self::cell_elements_offset() + std::mem::offset_of!(ChunkHead<T>, index)
     }
 
     /// Offset of the chunk's size. Only meaningful on a chunked cell
+    #[doc(hidden)]
     pub const fn cell_size_offset() -> usize {
-        Self::cell_elements_offset() + core::mem::offset_of!(crate::unrolled::ChunkHead<T>, size)
+        Self::cell_elements_offset() + std::mem::offset_of!(ChunkHead<T>, size)
     }
 
     /// Offset of the chunk's buffer. Only meaningful on a chunked cell
+    #[doc(hidden)]
     pub const fn cell_buffer_offset() -> usize {
-        Self::cell_elements_offset() + core::mem::offset_of!(crate::unrolled::ChunkHead<T>, buffer)
+        Self::cell_elements_offset() + std::mem::offset_of!(ChunkHead<T>, buffer)
     }
 
     /// Offset of the link to the next cell. Its low bits hold the tags
+    #[doc(hidden)]
     pub const fn cell_next_offset() -> usize {
-        core::mem::offset_of!(crate::unrolled::UnrolledCell<T, P, N, G>, next)
+        std::mem::offset_of!(UnrolledCell<T, P, N, G>, next)
     }
 
     /// Tag set on `next` when the cell holds its single element inline
+    #[doc(hidden)]
     pub const fn cell_inline_flag() -> usize {
-        crate::unrolled::INLINE_TAG
+        INLINE_TAG
     }
 
     /// Mask of the tag bits in `next`
+    #[doc(hidden)]
     pub const fn cell_next_tag_mask() -> usize {
-        crate::unrolled::LINK_TAG_MASK
+        LINK_TAG_MASK
     }
 
     /// Compare this list to another for pointer equality
@@ -178,12 +189,12 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
 
     #[doc(hidden)]
     pub fn index(&self) -> usize {
-        self.0.index() as _
+        self.0.index()
     }
 
     #[doc(hidden)]
     pub fn elements_length(&self) -> usize {
-        self.0 .0.slot_len()
+        self.0 .0.elements_len()
     }
 
     #[doc(hidden)]
@@ -209,12 +220,12 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     #[doc(hidden)]
     pub fn elements_as_ptr_usize(&self) -> usize {
         // Overflow is fine - this should give us a unique value?
-        self.0.elements_as_ptr_usize() + self.0.index() as usize
+        self.0.elements_as_ptr_usize() + self.0.index()
     }
 
     #[doc(hidden)]
     pub fn identity_tuple(&self) -> (usize, usize) {
-        (self.0.elements_as_ptr_usize(), self.0.index() as _)
+        (self.0.elements_as_ptr_usize(), self.0.index())
     }
 
     // Check the next pointer. If the next pointer is the same,
@@ -257,7 +268,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
         self.0
             .node_iter()
             .map(|x| {
-                let mut x = crate::unrolled::list_from_cell::<T, P, N, G>(x);
+                let mut x = list_from_cell::<T, P, N, G>(x);
                 P::make_mut(&mut x.0).next.set(None);
                 Self(x, PhantomData)
             })
@@ -309,10 +320,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     /// and `index` must be a position the cursor reached
     #[doc(hidden)]
     pub unsafe fn from_raw_parts(ptr: *const u8, index: usize) -> Self {
-        let cell = RawCell(
-            ptr as *const crate::unrolled::UnrolledCell<T, P, N, G>,
-            PhantomData,
-        );
+        let cell = RawCell(ptr as *const UnrolledCell<T, P, N, G>, PhantomData);
         unsafe { Self::from_raw_with_index(cell, index) }
     }
 
@@ -324,12 +332,9 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     #[doc(hidden)]
     pub unsafe fn reposition_from_raw_parts(self, ptr: *const u8, index: usize) -> Self {
         // Skip the drop handler - it would only run on an empty shell
-        let this = core::mem::ManuallyDrop::new(self);
-        let owned = unsafe { core::ptr::read(&this.0) };
-        match owned.reposition(
-            ptr as *const crate::unrolled::UnrolledCell<T, P, N, G>,
-            index,
-        ) {
+        let this = ManuallyDrop::new(self);
+        let owned = unsafe { std::ptr::read(&this.0) };
+        match owned.reposition(ptr as *const UnrolledCell<T, P, N, G>, index) {
             Ok(list) => GenericList(list, PhantomData),
             Err(held) => {
                 let out = unsafe { Self::from_raw_parts(ptr, index) };
@@ -348,7 +353,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     /// must be a position the cursor reached
     #[doc(hidden)]
     pub unsafe fn from_raw_with_index(cell: RawCell<T, P, N, G, D>, index: usize) -> Self {
-        let borrowed = core::mem::ManuallyDrop::new(unsafe { Self::from_raw(cell) });
+        let borrowed = ManuallyDrop::new(unsafe { Self::from_raw(cell) });
         let mut list = (*borrowed).clone();
         list.0.set_cursor(index);
         list
@@ -1750,7 +1755,7 @@ mod arc_tests {
     fn vlist_growth() {
         let list = vlist![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
-        let counts: Vec<_> = list.0.node_iter().map(|x| x.slot_len()).collect();
+        let counts: Vec<_> = list.0.node_iter().map(|x| x.elements_len()).collect();
         assert_eq!(vec![6, 8, 4, 2], counts);
     }
 
@@ -1809,7 +1814,7 @@ mod vlist_shared_tests {
     use crate::list::GenericList;
     use crate::shared::RcPointer;
 
-    // steel's configuration
+    // Single element nodes that double in size
     type V<T> = GenericList<T, RcPointer, 1, 2>;
 
     #[test]
@@ -1945,7 +1950,7 @@ mod cursor_tests {
         }
     }
 
-    fn shapes(len: usize) -> Vec<List<usize>> {
+    pub(super) fn shapes(len: usize) -> Vec<List<usize>> {
         let collected: List<usize> = (0..len).collect();
         let mut consed = List::new();
         for i in (0..len).rev() {
@@ -2010,6 +2015,7 @@ mod cursor_tests {
 
 #[cfg(test)]
 mod pop_front_tests {
+    use super::cursor_tests::shapes;
     use crate::list::List;
 
     #[test]
@@ -2029,17 +2035,6 @@ mod pop_front_tests {
 
         assert_eq!(list.pop_front(), Some(1));
         assert_eq!(list, (2..8).collect::<List<_>>());
-    }
-
-    fn shapes(len: usize) -> Vec<List<usize>> {
-        let collected: List<usize> = (0..len).collect();
-        let mut consed = List::new();
-        for i in (0..len).rev() {
-            consed.cons_mut(i);
-        }
-        let mut appended: List<usize> = (0..len / 2).collect();
-        appended.append_mut((len / 2..len).collect());
-        vec![collected, consed, appended]
     }
 
     // Popping everything off should match iterating, shared or not
@@ -2171,7 +2166,7 @@ mod cursor_proptests {
         }
 
         #[test]
-        fn cursor_matches_cdr_chain_steel(ops in build_strategy(), steps in any::<usize>(), keep_shared in any::<bool>()) {
+        fn cursor_matches_cdr_chain_vlist_starting_at_one(ops in build_strategy(), steps in any::<usize>(), keep_shared in any::<bool>()) {
             check_cursor::<1, 2>(ops, steps, keep_shared);
         }
     }

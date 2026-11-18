@@ -9,6 +9,7 @@ use crate::shared::PointerFamily;
 use std::cmp::Ordering;
 use std::iter::{FlatMap, FromIterator, Rev};
 use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
 
 type ConsumingIter<T, P, const N: u32, const G: u32> = FlatMap<
     NodeIter<T, P, N, G>,
@@ -127,7 +128,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
 
     pub fn shared_ptr_eq(&self, other: &Self) -> bool {
         // P::ptr_eq(&self.0.elements, &other.0.elements) && self.0.index == other.0.index
-        self.0.slot_ptr_eq(&other.0) && self.0.index() == other.0.index()
+        self.0.elements_ptr_eq(&other.0) && self.0.index() == other.0.index()
     }
 
     pub fn as_ptr_usize(&self) -> usize {
@@ -136,7 +137,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
 
     pub fn elements_as_ptr_usize(&self) -> usize {
         // P::as_ptr(&self.0.elements) as usize
-        self.0.slot_as_ptr() as usize
+        self.0.elements_as_ptr() as usize
     }
 
     pub fn next_ptr_as_usize(&self) -> Option<usize> {
@@ -144,7 +145,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     }
 
     pub fn current_node_iter(&self) -> impl Iterator<Item = &T> {
-        self.0.slot_iter().take(self.index() as _).rev()
+        self.0.elements_iter().take(self.index()).rev()
     }
 
     pub fn draining_iterator(self) -> DrainingConsumingWrapper<T, P, N, G> {
@@ -155,9 +156,9 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
                 .map(|mut cell| {
                     if let Some(value) = cell.take_inline() {
                         CellDrain::One((index >= 1).then_some(value))
-                    } else if cell.slot_is_unique() {
+                    } else if cell.elements_is_unique() {
                         CellDrain::Chunk(
-                            std::mem::take(cell.storage_mut())
+                            std::mem::take(cell.buffer_mut())
                                 .into_unique()
                                 .into_iter()
                                 .take(index as _)
@@ -192,13 +193,13 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
             let inner = P::make_mut(&mut left.0);
             // let elements_mut = P::make_mut(&mut inner.elements);
 
-            if inner.index() < inner.slot_len() {
+            if inner.index() < inner.elements_len() {
                 // elements_mut.truncate(inner.index);
-                inner.slot_truncate(inner.index());
+                inner.elements_truncate(inner.index());
             }
 
             // elements_mut.reverse();
-            inner.slot_reverse();
+            inner.elements_reverse();
             inner.next.set(None);
         }
 
@@ -206,14 +207,14 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
             let cell = P::make_mut(&mut right.0);
             // let elements_mut = P::make_mut(&mut cell.elements);
 
-            if cell.index() < cell.slot_len() {
+            if cell.index() < cell.elements_len() {
                 // elements_mut.truncate(cell.index);
 
-                cell.slot_truncate(cell.index());
+                cell.elements_truncate(cell.index());
             }
 
             // elements_mut.reverse();
-            cell.slot_reverse();
+            cell.elements_reverse();
             cell.next.set(Some(left));
             left = right;
         }
@@ -222,9 +223,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     }
 
     pub fn last(&self) -> Option<&T> {
-        self.node_iter()
-            .last()
-            .and_then(|x| x.slot_as_slice().first())
+        self.node_iter().last().and_then(|x| x.elements().first())
     }
 
     // Should be O(1) always
@@ -259,19 +258,19 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
                 // We want to chop off whatever we need to
                 // let elements_mut = P::make_mut(&mut inner.elements);
 
-                inner.slot_ensure_unique();
+                inner.elements_ensure_unique();
 
                 // Grab the end of the vector, this will be the new backing
                 // let remaining = elements_mut.split_off(inner.index - count);
 
                 let at = inner.index() - count;
-                let remaining = split_off(inner.storage_mut(), at);
+                let remaining = split_off(inner.buffer_mut(), at);
 
-                inner.set_index(count as _);
+                inner.set_index(count);
 
                 // *elements_mut = remaining;
 
-                *inner.storage_mut() = remaining;
+                *inner.buffer_mut() = remaining;
 
                 nodes.push(node);
                 break;
@@ -345,20 +344,20 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
 
         // This is saying: If we are pointing to a cell where the offset
         // has been moved to the right but the underlying data has not
-        // yet been truncated, we should attempt to eagerly do so, otherwise
-        // we should fall back to the existing implementation.
+        // yet been truncated, we should attempt to eagerly do so if we own
+        // the cell, otherwise we should fall back to a new node.
         let already_unique: Option<&mut UnrolledCell<T, P, N, G>> = if index < elements_len {
             // Consing onto the tail of a longer list. If someone else can see the
             // rest of the buffer, link to it from a new cell instead of copying
-            if !self.0.slot_is_unique() {
-                self.slow_path_new_node(value);
+            if !self.0.elements_is_unique() {
+                self.push_inline_cell(value);
                 return;
             }
             // Only truncate if we own the cell - `make_mut` would copy the whole
             // chunk. Otherwise fall through to allocating a new node
             match P::get_mut(&mut self.0) {
                 Some(cell) => {
-                    cell.slot_truncate(index);
+                    cell.elements_truncate(index);
                     elements_len = index;
                     Some(cell)
                 }
@@ -374,36 +373,27 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
             // Full - start a new cell
             self.push_inline_cell(value);
         } else {
-            // If we can, save the value. We can shrink this down a bit
-            if let Some(inner) = already_unique {
-                match inner.slot_try_push(value) {
+            // Push in place if we own both the cell and its buffer, otherwise
+            // start a new cell
+            let inner = match already_unique {
+                Some(inner) => Some(inner),
+                None => P::get_mut(&mut self.0),
+            };
+
+            match inner {
+                Some(inner) => match inner.elements_try_push(value) {
                     Ok(_) => {
                         inner.set_index(inner.index() + 1);
                     }
                     Err(v) => {
-                        self.slow_path_new_node(v);
+                        self.push_inline_cell(v);
                     }
-                }
-            } else {
-                match P::get_mut(&mut self.0) {
-                    Some(inner) => match inner.slot_try_push(value) {
-                        Ok(_) => {
-                            inner.set_index(inner.index() + 1);
-                        }
-                        Err(v) => {
-                            self.slow_path_new_node(v);
-                        }
-                    },
-                    None => {
-                        self.slow_path_new_node(value);
-                    }
+                },
+                None => {
+                    self.push_inline_cell(value);
                 }
             }
         }
-    }
-
-    fn slow_path_new_node(&mut self, value: T) {
-        self.push_inline_cell(value);
     }
 
     // Put `value` in a new cell in front of this list. New cells start inline,
@@ -439,7 +429,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
                 return Some(value);
             }
 
-            if cell.slot_is_unique() {
+            if cell.elements_is_unique() {
                 let index = cell.index();
                 if index == 0 {
                     return None;
@@ -447,8 +437,8 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
 
                 // The cursor may be behind the end of the buffer, so drop
                 // anything past it before popping
-                cell.slot_truncate(index);
-                let ret = cell.slot_pop();
+                cell.elements_truncate(index);
+                let ret = cell.elements_pop();
                 cell.set_index(index - 1);
 
                 // If after we've popped, its empty, move the pointer to the
@@ -568,11 +558,11 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     }
 
     pub(crate) fn elements(&self) -> &[T] {
-        self.0.slot_as_slice()
+        self.0.elements()
     }
 
     fn size(&self) -> u32 {
-        self.0.cap()
+        self.0.size()
     }
 
     #[cfg(test)]
@@ -610,7 +600,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     // Consuming iterators
     pub fn iter(&self) -> impl Iterator<Item = &'_ T> {
         self.node_iter()
-            .flat_map(|x| x.slot_as_slice()[0..x.index()].iter().rev())
+            .flat_map(|x| x.elements()[0..x.index()].iter().rev())
     }
 
     // Every node must have either CAPACITY elements, or be marked as full
@@ -618,9 +608,12 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     #[cfg(test)]
     pub fn assert_invariants(&self) {
         for node in self.node_iter() {
-            assert!(node.slot_len() <= node.cap() as usize, "node over capacity");
             assert!(
-                node.index() <= node.slot_len(),
+                node.elements_len() <= node.size() as usize,
+                "node over capacity"
+            );
+            assert!(
+                node.index() <= node.elements_len(),
                 "cursor past the end of the node"
             );
         }
@@ -636,7 +629,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
 
     pub fn get(&self, mut index: usize) -> Option<&T> {
         if index < self.0.index() {
-            self.0.slot_get(self.0.index() - index - 1)
+            self.0.elements_get(self.0.index() - index - 1)
         } else {
             let mut cur = self.0.next.cell();
             index -= self.0.index();
@@ -644,7 +637,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
             while let Some(node) = cur {
                 if index < node.index() {
                     let node_cap = node.index();
-                    return node.slot_get(node_cap as usize - index - 1);
+                    return node.elements_get(node_cap - index - 1);
                 } else {
                     cur = node.next.cell();
                     index -= node.index();
@@ -704,7 +697,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledList<T, P, 
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.slot_is_empty() || self.0.index() == 0
+        self.0.elements_is_empty() || self.0.index() == 0
     }
 
     pub fn index(&self) -> usize {
@@ -722,9 +715,9 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Drop
             if !self.next.is_inline() {
                 // The buffer is `ManuallyDrop` too, so drop it directly. Draining
                 // leaves an empty buffer behind, so this is always valid
-                core::mem::ManuallyDrop::drop(&mut (*self.storage.chunk).buffer);
+                ManuallyDrop::drop(&mut (*self.storage.chunk).buffer);
             } else if !self.next.is_moved() {
-                core::mem::ManuallyDrop::drop(&mut self.storage.inline);
+                ManuallyDrop::drop(&mut self.storage.inline);
             }
         }
 
@@ -749,7 +742,7 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Drop
 pub(crate) struct Link<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> {
     raw: *const UnrolledCell<T, P, N, G>,
     // Otherwise `P` is only used recursively, which the compiler rejects
-    _marker: core::marker::PhantomData<fn() -> P>,
+    _marker: PhantomData<fn() -> P>,
 }
 
 // Tag bits in `Link`:
@@ -772,7 +765,7 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
     fn pack(ptr: *const UnrolledCell<T, P, N, G>, variant: usize) -> Self {
         const {
             assert!(
-                core::mem::align_of::<UnrolledCell<T, P, N, G>>() > TAG_MASK,
+                std::mem::align_of::<UnrolledCell<T, P, N, G>>() > TAG_MASK,
                 "cell alignment must leave the tag bits free"
             )
         };
@@ -782,13 +775,13 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
         );
         Self {
             raw: ptr.map_addr(|addr| addr | variant),
-            _marker: core::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
 
     #[inline(always)]
     pub(crate) fn empty(variant: usize) -> Self {
-        Self::pack(core::ptr::null(), variant)
+        Self::pack(std::ptr::null(), variant)
     }
 
     #[inline(always)]
@@ -853,14 +846,12 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
 
     // Borrow the next cell as a list, without touching the count
     #[inline(always)]
-    pub(crate) fn borrow(&self) -> Option<core::mem::ManuallyDrop<UnrolledList<T, P, N, G>>> {
+    pub(crate) fn borrow(&self) -> Option<ManuallyDrop<UnrolledList<T, P, N, G>>> {
         let ptr = self.ptr();
         if ptr.is_null() {
             None
         } else {
-            Some(core::mem::ManuallyDrop::new(UnrolledList(unsafe {
-                P::from_raw(ptr)
-            })))
+            Some(ManuallyDrop::new(UnrolledList(unsafe { P::from_raw(ptr) })))
         }
     }
 
@@ -881,7 +872,7 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
     #[inline(always)]
     pub(crate) fn take(&mut self) -> Option<UnrolledList<T, P, N, G>> {
         let ptr = self.ptr();
-        self.raw = core::ptr::without_provenance(self.raw.addr() & TAG_MASK);
+        self.raw = std::ptr::without_provenance(self.raw.addr() & TAG_MASK);
         if ptr.is_null() {
             None
         } else {
@@ -894,12 +885,6 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
         let variant = self.variant();
         drop(self.take());
         *self = Self::new(list, variant);
-    }
-
-    pub(crate) fn strong_count(&self) -> usize {
-        self.borrow()
-            .map(|list| P::strong_count(&list.0))
-            .unwrap_or(0)
     }
 
     pub(crate) fn addr(&self) -> Option<usize> {
@@ -919,7 +904,7 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
 pub(crate) fn list_from_cell<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32>(
     cell: &UnrolledCell<T, P, N, G>,
 ) -> UnrolledList<T, P, N, G> {
-    let borrowed = core::mem::ManuallyDrop::new(UnrolledList::<T, P, N, G>(unsafe {
+    let borrowed = ManuallyDrop::new(UnrolledList::<T, P, N, G>(unsafe {
         P::from_raw(cell as *const UnrolledCell<T, P, N, G>)
     }));
     UnrolledList(P::clone(&borrowed.0))
@@ -950,8 +935,8 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Drop for 
 // a buffer. Which arm is live is tracked in the tag bits of `next`
 #[repr(C)]
 pub(crate) union CellStorage<T: Clone + 'static> {
-    pub(crate) inline: core::mem::ManuallyDrop<T>,
-    pub(crate) chunk: core::mem::ManuallyDrop<ChunkHead<T>>,
+    pub(crate) inline: ManuallyDrop<T>,
+    pub(crate) chunk: ManuallyDrop<ChunkHead<T>>,
 }
 
 // The cursor, capacity and buffer of a chunked cell
@@ -959,7 +944,7 @@ pub(crate) union CellStorage<T: Clone + 'static> {
 pub(crate) struct ChunkHead<T: Clone + 'static> {
     pub(crate) index: u32,
     pub(crate) size: u32,
-    pub(crate) buffer: core::mem::ManuallyDrop<AtomicSharedVector<T>>,
+    pub(crate) buffer: ManuallyDrop<AtomicSharedVector<T>>,
 }
 
 // Aligned to 8 so `Link` has 3 tag bits on 32 bit targets too
@@ -974,14 +959,14 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Clone for UnrolledC
         let storage = unsafe {
             if self.next.is_inline() {
                 CellStorage {
-                    inline: core::mem::ManuallyDrop::new((*self.storage.inline).clone()),
+                    inline: ManuallyDrop::new((*self.storage.inline).clone()),
                 }
             } else {
                 CellStorage {
-                    chunk: core::mem::ManuallyDrop::new(ChunkHead {
+                    chunk: ManuallyDrop::new(ChunkHead {
                         index: self.storage.chunk.index,
                         size: self.storage.chunk.size,
-                        buffer: core::mem::ManuallyDrop::new((*self.storage.chunk.buffer).clone()),
+                        buffer: ManuallyDrop::new((*self.storage.chunk.buffer).clone()),
                     }),
                 }
             }
@@ -1005,7 +990,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
     const GROWTH_RATE: u32 = if G == 0 { 1 } else { G };
 
     #[inline(always)]
-    pub(crate) fn cap(&self) -> u32 {
+    pub(crate) fn size(&self) -> u32 {
         if self.is_inline() {
             // Room for one more before it has to move to a chunk
             2
@@ -1034,7 +1019,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
     }
 
     #[inline(always)]
-    pub(crate) fn set_cap(&mut self, size: u32) {
+    pub(crate) fn set_size(&mut self, size: u32) {
         debug_assert!(!self.is_inline());
         unsafe { (*self.storage.chunk).size = size };
     }
@@ -1051,7 +1036,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
     }
 
     #[inline(always)]
-    pub(crate) fn storage(&self) -> &AtomicSharedVector<T> {
+    pub(crate) fn buffer(&self) -> &AtomicSharedVector<T> {
         &self.chunk().buffer
     }
 
@@ -1059,7 +1044,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
     #[cold]
     fn deinline(&mut self) {
         debug_assert!(self.next.is_inline() && !self.next.is_moved());
-        let value = unsafe { core::mem::ManuallyDrop::take(&mut self.storage.inline) };
+        let value = unsafe { ManuallyDrop::take(&mut self.storage.inline) };
         // A second value is on the way, so make room for exactly two
         let cap = 2;
         // The capacity target still grows from the previous cell, otherwise
@@ -1067,23 +1052,23 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
         let target = self
             .next
             .cell()
-            .map(|cell| cell.cap().saturating_mul(Self::GROWTH_RATE))
+            .map(|cell| cell.size().saturating_mul(Self::GROWTH_RATE))
             .unwrap_or(N)
             .max(cap as u32);
         let mut buffer = AtomicSharedVector::with_capacity(cap);
         buffer.push(value);
         self.storage = CellStorage {
-            chunk: core::mem::ManuallyDrop::new(ChunkHead {
+            chunk: ManuallyDrop::new(ChunkHead {
                 index: 1,
                 size: target,
-                buffer: core::mem::ManuallyDrop::new(buffer),
+                buffer: ManuallyDrop::new(buffer),
             }),
         };
         self.next.set_variant(VARIANT_CHUNK);
     }
 
     #[inline(always)]
-    pub(crate) fn storage_mut(&mut self) -> &mut AtomicSharedVector<T> {
+    pub(crate) fn buffer_mut(&mut self) -> &mut AtomicSharedVector<T> {
         if self.is_inline() {
             self.deinline();
         }
@@ -1096,7 +1081,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
             return None;
         }
         self.next.set_moved(true);
-        Some(unsafe { core::mem::ManuallyDrop::take(&mut self.storage.inline) })
+        Some(unsafe { ManuallyDrop::take(&mut self.storage.inline) })
     }
 
     #[inline(always)]
@@ -1106,99 +1091,99 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
     }
 
     #[inline(always)]
-    pub(crate) fn slot_len(&self) -> usize {
+    pub(crate) fn elements_len(&self) -> usize {
         if self.is_inline() {
             1
         } else {
-            self.storage().len()
+            self.buffer().len()
         }
     }
 
     #[inline(always)]
-    pub(crate) fn slot_get(&self, i: usize) -> Option<&T> {
+    pub(crate) fn elements_get(&self, i: usize) -> Option<&T> {
         if self.is_inline() {
             (i == 0).then(|| self.inline_ref())
         } else {
-            self.storage().get(i)
+            self.buffer().get(i)
         }
     }
 
     #[inline(always)]
-    pub(crate) fn slot_is_empty(&self) -> bool {
-        !self.is_inline() && self.storage().is_empty()
+    pub(crate) fn elements_is_empty(&self) -> bool {
+        !self.is_inline() && self.buffer().is_empty()
     }
 
     #[inline(always)]
-    pub(crate) fn slot_iter(&self) -> core::slice::Iter<'_, T> {
-        self.slot_as_slice().iter()
+    pub(crate) fn elements_iter(&self) -> std::slice::Iter<'_, T> {
+        self.elements().iter()
     }
 
     #[inline(always)]
-    pub(crate) fn slot_as_slice(&self) -> &[T] {
+    pub(crate) fn elements(&self) -> &[T] {
         if self.is_inline() {
-            core::slice::from_ref(self.inline_ref())
+            std::slice::from_ref(self.inline_ref())
         } else {
-            self.storage()
+            self.buffer()
         }
     }
 
     #[inline(always)]
-    pub(crate) fn slot_is_unique(&self) -> bool {
+    pub(crate) fn elements_is_unique(&self) -> bool {
         // An inline value is owned by the cell
-        self.is_inline() || self.storage().is_unique()
+        self.is_inline() || self.buffer().is_unique()
     }
 
     #[inline(always)]
-    pub(crate) fn slot_as_ptr(&self) -> *const T {
+    pub(crate) fn elements_as_ptr(&self) -> *const T {
         if self.is_inline() {
             self.inline_ref() as *const T
         } else {
-            self.storage().as_ptr()
+            self.buffer().as_ptr()
         }
     }
 
     #[inline(always)]
-    pub(crate) fn slot_try_push(&mut self, value: T) -> Result<(), T> {
-        self.storage_mut().try_push(value)
+    pub(crate) fn elements_try_push(&mut self, value: T) -> Result<(), T> {
+        self.buffer_mut().try_push(value)
     }
 
     #[inline(always)]
-    pub(crate) fn slot_push(&mut self, value: T) {
-        self.storage_mut().push(value)
+    pub(crate) fn elements_push(&mut self, value: T) {
+        self.buffer_mut().push(value)
     }
 
     #[inline(always)]
-    pub(crate) fn slot_pop(&mut self) -> Option<T> {
-        self.storage_mut().pop()
+    pub(crate) fn elements_pop(&mut self) -> Option<T> {
+        self.buffer_mut().pop()
     }
 
-    pub(crate) fn slot_truncate(&mut self, len: usize) {
+    pub(crate) fn elements_truncate(&mut self, len: usize) {
         if self.is_inline() && len >= 1 {
             return;
         }
-        truncate(self.storage_mut(), len);
+        truncate(self.buffer_mut(), len);
     }
 
     #[inline(always)]
-    pub(crate) fn slot_reverse(&mut self) {
+    pub(crate) fn elements_reverse(&mut self) {
         if !self.is_inline() {
-            self.storage_mut().reverse()
+            self.buffer_mut().reverse()
         }
     }
 
     #[inline(always)]
-    pub(crate) fn slot_ensure_unique(&mut self) {
+    pub(crate) fn elements_ensure_unique(&mut self) {
         if !self.is_inline() {
-            self.storage_mut().ensure_unique()
+            self.buffer_mut().ensure_unique()
         }
     }
 
     #[inline(always)]
-    pub(crate) fn slot_ptr_eq(&self, other: &Self) -> bool {
+    pub(crate) fn elements_ptr_eq(&self, other: &Self) -> bool {
         if self.is_inline() || other.is_inline() {
-            return self.slot_as_ptr() == other.slot_as_ptr();
+            return self.elements_as_ptr() == other.elements_as_ptr();
         }
-        self.storage().ptr_eq(other.storage())
+        self.buffer().ptr_eq(other.buffer())
     }
 
     fn new() -> Self {
@@ -1214,10 +1199,10 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
     ) -> Self {
         UnrolledCell {
             storage: CellStorage {
-                chunk: core::mem::ManuallyDrop::new(ChunkHead {
+                chunk: ManuallyDrop::new(ChunkHead {
                     index,
                     size,
-                    buffer: core::mem::ManuallyDrop::new(buffer),
+                    buffer: ManuallyDrop::new(buffer),
                 }),
             },
             next: Link::new(next, VARIANT_CHUNK),
@@ -1228,7 +1213,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
     fn new_inline(value: T, next: Option<UnrolledList<T, P, N, G>>) -> Self {
         UnrolledCell {
             storage: CellStorage {
-                inline: core::mem::ManuallyDrop::new(value),
+                inline: ManuallyDrop::new(value),
             },
             next: Link::new(next, VARIANT_INLINE),
         }
@@ -1243,7 +1228,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
         if self.index() == 0 {
             return None;
         }
-        self.slot_get(self.index() - 1)
+        self.elements_get(self.index() - 1)
     }
 
     // This _does_ create a boxed representation of the next item. Its possible we don't actually
@@ -1261,20 +1246,12 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
         debug_assert!(!self.is_inline());
         let mut cell = Self::new_chunk(
             (self.index() - 1) as u32,
-            self.cap(),
-            self.storage().clone(),
+            self.size(),
+            self.buffer().clone(),
             None,
         );
         cell.next = self.next.clone_link();
         cell
-    }
-
-    // TODO make this better
-    fn cons_mut(&mut self, value: T) {
-        // let reference = P::make_mut(&mut self.elements);
-        self.slot_push(value);
-        // reference.push(value);
-        self.set_index(self.index() + 1);
     }
 
     // Spill over the values to a new node
@@ -1285,7 +1262,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
         let shared = P::strong_count(&cdr.0) > 1;
         // Consing onto the tail of a longer list someone else can see, link to
         // it instead of copying
-        let behind_frontier = cdr.0.index() < cdr.elements().len() && !cdr.0.slot_is_unique();
+        let behind_frontier = cdr.0.index() < cdr.elements().len() && !cdr.0.elements_is_unique();
 
         if shared || behind_frontier || cdr.elements().len() > size as usize - 1 {
             // Don't link to an empty list
@@ -1293,15 +1270,14 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
             UnrolledList(P::new(Self::new_inline(value, next)))
         } else {
             let inner = P::make_mut(&mut cdr.0);
-            // let elements = P::make_mut(&mut inner.elements);
 
             // Drop anything past the cursor first. Then push before bumping the
             // index, since the push is what moves an inline cell into a chunk
             let idx = inner.index();
-            if idx < inner.slot_as_slice().len() {
-                inner.slot_truncate(idx);
+            if idx < inner.elements().len() {
+                inner.elements_truncate(idx);
             }
-            inner.slot_push(value);
+            inner.elements_push(value);
             inner.set_index(inner.index() + 1);
             cdr
         }
@@ -1333,7 +1309,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> Iterator
             if let Some(next) = _self.0.next.borrow() {
                 // If we can, drop these values!
                 // if next.strong_count() == 1 && P::strong_count(&next.0.elements) == 1 {
-                if P::strong_count(&next.0) == 1 && next.0.slot_is_unique() {
+                if P::strong_count(&next.0) == 1 && next.0.elements_is_unique() {
                     // self.cur = _self.0.next.clone();
                     self.cur = P::get_mut(&mut _self.0).and_then(|x| x.next.take());
                 } else {
@@ -1523,7 +1499,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> IntoIterator
             /*
             let cell = P::make_mut(&mut x.0);
 
-            match P::get_mut(cell.storage_mut()) {
+            match P::get_mut(&mut cell.elements) {
                 Some(vec) => {
                     let elements = std::mem::take(vec);
                     MaybeCloned::Owned(elements.into_iter().take(x.index()).rev())
@@ -1536,11 +1512,11 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> IntoIterator
 
             let cell = P::make_mut(&mut x.0);
 
-            let v = std::mem::take(cell.storage_mut());
+            let v = std::mem::take(cell.buffer_mut());
 
             let unique = v.into_unique();
 
-            unique.into_iter().take(x.index() as _).rev()
+            unique.into_iter().take(x.index()).rev()
 
             // cell.elements.into_unique()
 
@@ -1596,7 +1572,7 @@ impl<'a, T: Clone, P: PointerFamily, const N: u32, const G: u32> IntoIterator
     fn into_iter(self) -> Self::IntoIter {
         IterWrapper(
             self.node_iter()
-                .flat_map(|x| x.slot_as_slice()[0..x.index()].iter().rev()),
+                .flat_map(|x| x.elements()[0..x.index()].iter().rev()),
         )
     }
 }
@@ -1733,7 +1709,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> FromIterator<Unroll
 
             if let Some(UnrolledList(cell)) = nodes.get_mut(i) {
                 // Check if this node can fit entirely into the previous one
-                if cell.slot_len() + prev.0.slot_len() <= prev.0.cap() as usize {
+                if cell.elements_len() + prev.0.elements_len() <= prev.0.size() as usize {
                     let left_inner = P::make_mut(cell);
                     let right_inner = P::make_mut(&mut prev.0);
 
@@ -1741,35 +1717,35 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> FromIterator<Unroll
                     // let right_vector = P::make_mut(&mut right_inner.elements);
 
                     // Drop the useless elements
-                    if left_inner.index() < left_inner.slot_len() {
+                    if left_inner.index() < left_inner.elements_len() {
                         // left_vector.truncate(left_inner.index);
 
-                        left_inner.slot_truncate(left_inner.index());
+                        left_inner.elements_truncate(left_inner.index());
                     }
 
                     // TODO
-                    if right_inner.index() < right_inner.slot_len() {
+                    if right_inner.index() < right_inner.elements_len() {
                         // right_vector.truncate(right_inner.index);
 
-                        right_inner.slot_truncate(right_inner.index());
+                        right_inner.elements_truncate(right_inner.index());
                     }
 
                     // Perform the actual move of the values
                     // right_vector.append(left_vector);
 
-                    let mut taken = std::mem::take(left_inner.storage_mut());
-                    right_inner.storage_mut().append(&mut taken);
+                    let mut taken = std::mem::take(left_inner.buffer_mut());
+                    right_inner.buffer_mut().append(&mut taken);
 
                     // Swap the locations now after we've done the update
-                    std::mem::swap(left_inner.storage_mut(), right_inner.storage_mut());
+                    std::mem::swap(left_inner.buffer_mut(), right_inner.buffer_mut());
 
                     // Update this node to use correct capacity
-                    let (left_cap, right_cap) = (left_inner.cap(), right_inner.cap());
-                    left_inner.set_cap(right_cap);
-                    right_inner.set_cap(left_cap);
+                    let (left_size, right_size) = (left_inner.size(), right_inner.size());
+                    left_inner.set_size(right_size);
+                    right_inner.set_size(left_size);
 
                     // Adjust the indices accordingly
-                    left_inner.set_index(left_inner.slot_len());
+                    left_inner.set_index(left_inner.elements_len());
                     right_inner.set_index(0);
 
                     // Update this node to now point to the right nodes tail
@@ -1941,7 +1917,7 @@ mod iterator_tests {
         left = left.append(right);
 
         for node in left.node_iter() {
-            println!("{:?}", node.slot_len());
+            println!("{:?}", node.elements_len());
         }
 
         // Should have 4 nodes at this point
@@ -2451,8 +2427,8 @@ mod reference_counting_correctness {
     // Dropping cells one at a time with `cdr_mut` should release the buffers
     #[test]
     fn cdr_mut_releases_chunk_buffers() {
-        let tracked = std::rc::Rc::new(());
         type Tracked = std::rc::Rc<()>;
+        let tracked = std::rc::Rc::new(());
         let mut list: UnrolledList<Tracked, RcPointer, 4, 2> =
             (0..64).map(|_| tracked.clone()).collect();
         assert_eq!(std::rc::Rc::strong_count(&tracked), 65);
@@ -2465,8 +2441,8 @@ mod reference_counting_correctness {
 
     #[test]
     fn dropping_a_whole_list_releases_chunk_buffers() {
-        let tracked = std::rc::Rc::new(());
         type Tracked = std::rc::Rc<()>;
+        let tracked = std::rc::Rc::new(());
         let list: UnrolledList<Tracked, RcPointer, 4, 2> =
             (0..64).map(|_| tracked.clone()).collect();
         drop(list);

@@ -720,7 +720,7 @@ run_property_tests!(vlist, crate::unrolled::UnrolledList<T, crate::shared::RcPoi
 
 run_property_tests!(vlist_growth_rate_4, crate::unrolled::UnrolledList<T, crate::shared::RcPointer, 4, 4>);
 
-// steel's configuration
-run_property_tests!(vlist_steel, crate::unrolled::UnrolledList<T, crate::shared::RcPointer, 1, 2>);
+// Single element nodes that double in size
+run_property_tests!(vlist_starting_at_one, crate::unrolled::UnrolledList<T, crate::shared::RcPointer, 1, 2>);
 
 run_property_tests!(vlist_arc, crate::unrolled::UnrolledList<T, crate::shared::ArcPointer, 4, 2>);

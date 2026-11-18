@@ -73,6 +73,7 @@ impl<T, R: RefCount, A: Allocator> RefCountedVector<T, R, A> {
         Self::try_with_capacity_in(0, allocator).unwrap()
     }
 
+    /// Returns the size in bytes of the header stored in front of the elements.
     pub const fn header_size() -> usize {
         header_size::<raw::Header<R, A>, T>()
     }
@@ -287,13 +288,19 @@ impl<T: Clone, R: RefCount, A: Allocator + Clone> RefCountedVector<T, R, A> {
         }
     }
 
+    /// Appends an element to the back of the vector if the buffer is not shared.
+    ///
+    /// Returns the element back as `Err` if the buffer is shared, rather than copying it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the new capacity exceeds `u32::MAX` bytes.
     pub fn try_push(&mut self, val: T) -> Result<(), T> {
-        let is_unique = self.is_unique();
-        if !is_unique {
+        if !self.is_unique() {
             return Err(val);
         }
 
-        unsafe { self.unique_reserve(1, is_unique) };
+        unsafe { self.unique_reserve(1, true) };
 
         unsafe {
             raw::push_assuming_capacity(self.data_ptr(), &mut self.vec_header_mut(), val);
@@ -471,6 +478,16 @@ impl<T: Clone, R: RefCount, A: Allocator + Clone> RefCountedVector<T, R, A> {
         }
     }
 
+    /// Reserves at least `additional` extra elements, using an `is_unique` the caller has
+    /// already computed.
+    ///
+    /// # Safety
+    ///
+    /// `is_unique` must be the current result of `is_unique()`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the new capacity exceeds `u32::MAX` bytes.
     #[inline]
     pub unsafe fn unique_reserve(&mut self, additional: usize, is_unique: bool) {
         let enough_capacity = self.remaining_capacity() >= additional;
