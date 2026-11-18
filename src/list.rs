@@ -10,11 +10,14 @@
 //! Using the mutable functions when possible enables in place mutation. Much of the internal structure is shared,
 //! so even immutable functions can be fast, but the mutable functions will be faster.
 
-use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData, mem::ManuallyDrop};
+use alloc::vec::Vec;
+use core::{cmp::Ordering, iter::FromIterator, marker::PhantomData, mem::ManuallyDrop};
 
+#[cfg(target_has_atomic = "ptr")]
+use crate::shared::ArcPointer;
 use crate::{
     handler::{DefaultDropHandler, DropHandler},
-    shared::{ArcPointer, PointerFamily, RcPointer},
+    shared::{PointerFamily, RcPointer},
     shared_vector::AtomicSharedVector,
     unrolled::{
         list_from_cell, ChunkHead, ConsumingWrapper, IterWrapper, UnrolledCell, UnrolledList,
@@ -67,9 +70,11 @@ pub struct GenericList<
     D: DropHandler<Self> = DefaultDropHandler,
 >(UnrolledList<T, P, N, G>, PhantomData<D>);
 
+#[cfg(target_has_atomic = "ptr")]
 pub type SharedList<T> = GenericList<T, ArcPointer, 256>;
 pub type List<T> = GenericList<T, RcPointer, 256>;
 
+#[cfg(target_has_atomic = "ptr")]
 pub type SharedVList<T> = GenericList<T, ArcPointer, 2, 2>;
 pub type VList<T> = GenericList<T, RcPointer, 2, 2>;
 
@@ -143,31 +148,31 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     /// Offset of the cell's storage. On an inline cell this is the element itself
     #[doc(hidden)]
     pub const fn cell_elements_offset() -> usize {
-        std::mem::offset_of!(UnrolledCell<T, P, N, G>, storage)
+        core::mem::offset_of!(UnrolledCell<T, P, N, G>, storage)
     }
 
     /// Offset of the chunk's index. Only meaningful on a chunked cell
     #[doc(hidden)]
     pub const fn cell_index_offset() -> usize {
-        Self::cell_elements_offset() + std::mem::offset_of!(ChunkHead<T>, index)
+        Self::cell_elements_offset() + core::mem::offset_of!(ChunkHead<T>, index)
     }
 
     /// Offset of the chunk's size. Only meaningful on a chunked cell
     #[doc(hidden)]
     pub const fn cell_size_offset() -> usize {
-        Self::cell_elements_offset() + std::mem::offset_of!(ChunkHead<T>, size)
+        Self::cell_elements_offset() + core::mem::offset_of!(ChunkHead<T>, size)
     }
 
     /// Offset of the chunk's buffer. Only meaningful on a chunked cell
     #[doc(hidden)]
     pub const fn cell_buffer_offset() -> usize {
-        Self::cell_elements_offset() + std::mem::offset_of!(ChunkHead<T>, buffer)
+        Self::cell_elements_offset() + core::mem::offset_of!(ChunkHead<T>, buffer)
     }
 
     /// Offset of the link to the next cell. Its low bits hold the tags
     #[doc(hidden)]
     pub const fn cell_next_offset() -> usize {
-        std::mem::offset_of!(UnrolledCell<T, P, N, G>, next)
+        core::mem::offset_of!(UnrolledCell<T, P, N, G>, next)
     }
 
     /// Tag set on `next` when the cell holds its single element inline
@@ -250,13 +255,13 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
         mut self,
         // default: UnrolledList<T, P, N, G>,
     ) -> impl Iterator<Item = T> {
-        std::mem::take(&mut self.0).draining_iterator()
-        // std::mem::replace(&mut self.0, default).draining_iterator()
+        core::mem::take(&mut self.0).draining_iterator()
+        // core::mem::replace(&mut self.0, default).draining_iterator()
         // todo!()
         // let x = MaybeUninit::new(self);
         // let x = x.as_ptr();
 
-        // unsafe { std::ptr::read(&(*x).0).draining_iterator() }
+        // unsafe { core::ptr::read(&(*x).0).draining_iterator() }
 
         // self.0.draining_iterator()
         // ManuallyDrop::take(slot)
@@ -290,7 +295,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     ) -> O {
         let value = unsafe { Self::from_raw(cell) };
         let res = func(&value);
-        std::mem::forget(value);
+        core::mem::forget(value);
         res
     }
 
@@ -333,7 +338,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     pub unsafe fn reposition_from_raw_parts(self, ptr: *const u8, index: usize) -> Self {
         // Skip the drop handler - it would only run on an empty shell
         let this = ManuallyDrop::new(self);
-        let owned = unsafe { std::ptr::read(&this.0) };
+        let owned = unsafe { core::ptr::read(&this.0) };
         match owned.reposition(ptr as *const UnrolledCell<T, P, N, G>, index) {
             Ok(list) => GenericList(list, PhantomData),
             Err(held) => {
@@ -384,7 +389,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     /// assert_eq!(list, list![5, 4, 3, 2, 1])
     /// ```
     pub fn reverse(mut self) -> Self {
-        self.0 = std::mem::take(&mut self.0).reverse();
+        self.0 = core::mem::take(&mut self.0).reverse();
         self
     }
 
@@ -521,7 +526,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     /// ```
     pub fn cons(value: T, mut other: GenericList<T, P, N, G, D>) -> GenericList<T, P, N, G, D> {
         Self(
-            UnrolledList::cons(value, std::mem::take(&mut other.0)),
+            UnrolledList::cons(value, core::mem::take(&mut other.0)),
             PhantomData,
         )
     }
@@ -654,7 +659,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     /// ```
     pub fn append(mut self, mut other: Self) -> Self {
         GenericList(
-            std::mem::take(&mut self.0).append(std::mem::take(&mut other.0)),
+            core::mem::take(&mut self.0).append(core::mem::take(&mut other.0)),
             PhantomData,
         )
     }
@@ -672,7 +677,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     /// assert_eq!(left, list![1, 2, 3, 4, 5, 6])
     /// ```
     pub fn append_mut(&mut self, mut other: Self) {
-        self.0.append_mut(std::mem::take(&mut other.0));
+        self.0.append_mut(core::mem::take(&mut other.0));
     }
 
     /// Checks whether a list is empty
@@ -765,7 +770,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     fn from_iter<I: IntoIterator<Item = GenericList<T, P, N, G, D>>>(iter: I) -> Self {
         GenericList(
             iter.into_iter()
-                .flat_map(|mut x| std::mem::take(&mut x.0).into_node_iter())
+                .flat_map(|mut x| core::mem::take(&mut x.0).into_node_iter())
                 .collect(),
             PhantomData,
         )
@@ -781,14 +786,14 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
 }
 
 impl<
-        T: Clone + std::fmt::Debug,
+        T: Clone + core::fmt::Debug,
         P: PointerFamily,
         const N: u32,
         const G: u32,
         D: DropHandler<Self>,
-    > std::fmt::Debug for GenericList<T, P, N, G, D>
+    > core::fmt::Debug for GenericList<T, P, N, G, D>
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list().entries(self).finish()
     }
 }
@@ -899,7 +904,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
 
     #[inline(always)]
     fn into_iter(mut self) -> Self::IntoIter {
-        ConsumingIter(std::mem::take(&mut self.0).into_iter(), PhantomData)
+        ConsumingIter(core::mem::take(&mut self.0).into_iter(), PhantomData)
     }
 }
 
@@ -954,7 +959,7 @@ impl<T: Clone + Ord, P: PointerFamily, const N: u32, const G: u32, D: DropHandle
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> std::ops::Add
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> core::ops::Add
     for GenericList<T, P, N, G, D>
 {
     type Output = GenericList<T, P, N, G, D>;
@@ -971,7 +976,7 @@ impl<
         const N: u32,
         const G: u32,
         D: DropHandler<GenericList<T, P, N, G, D>>,
-    > std::ops::Add for &GenericList<T, P, N, G, D>
+    > core::ops::Add for &GenericList<T, P, N, G, D>
 {
     type Output = GenericList<T, P, N, G, D>;
 
@@ -981,7 +986,7 @@ impl<
     }
 }
 
-impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> std::iter::Sum
+impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>> core::iter::Sum
     for GenericList<T, P, N, G, D>
 {
     fn sum<I>(it: I) -> Self
@@ -993,14 +998,14 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
 }
 
 impl<
-        T: Clone + std::hash::Hash,
+        T: Clone + core::hash::Hash,
         P: PointerFamily,
         const N: u32,
         const G: u32,
         D: DropHandler<Self>,
-    > std::hash::Hash for GenericList<T, P, N, G, D>
+    > core::hash::Hash for GenericList<T, P, N, G, D>
 {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         for i in self {
             i.hash(state)
         }
@@ -1008,7 +1013,7 @@ impl<
 }
 
 impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self>>
-    std::ops::Index<usize> for GenericList<T, P, N, G, D>
+    core::ops::Index<usize> for GenericList<T, P, N, G, D>
 {
     type Output = T;
     /// Get a reference to the value at index `index` in the vector.
@@ -1038,7 +1043,7 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
 #[cfg(test)]
 mod tests {
 
-    use std::ops::Add;
+    use core::ops::Add;
 
     use super::*;
     use crate::{list, vlist};
@@ -1413,7 +1418,7 @@ mod tests {
 #[cfg(test)]
 mod arc_tests {
 
-    use std::ops::Add;
+    use core::ops::Add;
 
     use super::*;
     use crate::{shared_list, shared_vlist, vlist};
@@ -1805,7 +1810,7 @@ mod arc_tests {
 
         // Create value from pointer
         let value = unsafe { SharedVList::from_raw(pointer) };
-        std::mem::forget(value);
+        core::mem::forget(value);
     }
 }
 

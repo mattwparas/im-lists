@@ -1,4 +1,5 @@
 use crate::shared_vector::alloc::{Allocator, Global};
+use ::alloc::vec::Vec;
 use core::ptr::{self};
 use core::slice::{self};
 

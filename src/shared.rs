@@ -1,4 +1,7 @@
-use std::{ops::Deref, rc::Rc, sync::Arc};
+use alloc::rc::Rc;
+#[cfg(target_has_atomic = "ptr")]
+use alloc::sync::Arc;
+use core::ops::Deref;
 
 pub trait PointerFamily: 'static {
     type Pointer<T: 'static>: Deref<Target = T>;
@@ -63,8 +66,10 @@ impl PointerFamily for RcPointer {
     }
 }
 
+#[cfg(target_has_atomic = "ptr")]
 pub struct ArcPointer;
 
+#[cfg(target_has_atomic = "ptr")]
 impl PointerFamily for ArcPointer {
     type Pointer<T: 'static> = Arc<T>;
 

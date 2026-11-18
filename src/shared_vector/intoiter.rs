@@ -1,4 +1,4 @@
-use std::{
+use core::{
     mem,
     ptr::{self, NonNull},
 };
@@ -129,7 +129,7 @@ impl<T> ExactSizeIterator for RawValIter<T> {}
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::AtomicUsize;
+    use core::sync::atomic::AtomicUsize;
 
     #[test]
     fn into_iter_test() {
@@ -180,7 +180,7 @@ mod tests {
 
         impl Drop for Foo {
             fn drop(&mut self) {
-                COUNTER.fetch_add(1, std::sync::atomic::Ordering::Acquire);
+                COUNTER.fetch_add(1, core::sync::atomic::Ordering::Acquire);
             }
         }
 
@@ -193,7 +193,7 @@ mod tests {
         let resulting = vector.into_iter().collect::<Vec<_>>();
         let sum = resulting.into_iter().map(|x| *x.value).sum::<i32>();
         assert_eq!(sum, 5050);
-        assert_eq!(COUNTER.load(std::sync::atomic::Ordering::Relaxed), 101);
+        assert_eq!(COUNTER.load(core::sync::atomic::Ordering::Relaxed), 101);
     }
 
     #[test]
@@ -210,7 +210,7 @@ mod tests {
 
         impl Drop for Foo {
             fn drop(&mut self) {
-                COUNTER.fetch_add(1, std::sync::atomic::Ordering::Acquire);
+                COUNTER.fetch_add(1, core::sync::atomic::Ordering::Acquire);
             }
         }
 
@@ -227,6 +227,6 @@ mod tests {
 
         drop(iter);
 
-        assert_eq!(COUNTER.load(std::sync::atomic::Ordering::Relaxed), 101);
+        assert_eq!(COUNTER.load(core::sync::atomic::Ordering::Relaxed), 101);
     }
 }
