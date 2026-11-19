@@ -907,19 +907,6 @@ impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Link<T, P
     }
 }
 
-// Get a new reference to a cell from a borrow of it. Only valid for cells
-// that live inside a `P` allocation, which is all of the ones the node
-// iterators hand out
-#[inline(always)]
-pub(crate) fn list_from_cell<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32>(
-    cell: &UnrolledCell<T, P, N, G>,
-) -> UnrolledList<T, P, N, G> {
-    let borrowed = ManuallyDrop::new(UnrolledList::<T, P, N, G>(unsafe {
-        P::from_raw(cell as *const UnrolledCell<T, P, N, G>)
-    }));
-    UnrolledList(P::clone(&borrowed.0))
-}
-
 // A `Link` is just a `P::Pointer`, so it's as `Send`/`Sync` as one
 unsafe impl<T: Clone + 'static, P: PointerFamily, const N: u32, const G: u32> Send
     for Link<T, P, N, G>
@@ -1054,7 +1041,6 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
     #[cold]
     fn deinline(&mut self) {
         debug_assert!(self.next.is_inline() && !self.next.is_moved());
-        let value = unsafe { ManuallyDrop::take(&mut self.storage.inline) };
         // A second value is on the way, so make room for exactly two
         let cap = 2;
         // The capacity target still grows from the previous cell, otherwise
@@ -1065,7 +1051,10 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32> UnrolledCell<T, P, 
             .map(|cell| cell.size().saturating_mul(Self::GROWTH_RATE))
             .unwrap_or(N)
             .max(cap as u32);
+        // Allocate before moving the value out. If the allocation panics the
+        // cell is still inline, and `Drop` would drop the value a second time
         let mut buffer = AtomicSharedVector::with_capacity(cap);
+        let value = unsafe { ManuallyDrop::take(&mut self.storage.inline) };
         buffer.push(value);
         self.storage = CellStorage {
             chunk: ManuallyDrop::new(ChunkHead {

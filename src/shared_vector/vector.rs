@@ -167,7 +167,7 @@ impl<T> RawVector<T> {
     }
 
     #[inline]
-    fn data_ptr(&self) -> *mut T {
+    pub(crate) fn data_ptr(&self) -> *mut T {
         self.data.as_ptr()
     }
 
@@ -644,7 +644,7 @@ impl<T> RawVector<T> {
         unsafe {
             // Set self.vec length's to start, to be safe in case Drain is leaked
             self.header.len = start as u32;
-            let range_slice = core::slice::from_raw_parts(self.as_ptr().add(start), end - start);
+            let range_slice = core::slice::from_raw_parts(self.data_ptr().add(start), end - start);
             Drain {
                 tail_start: end,
                 tail_len: len - end,

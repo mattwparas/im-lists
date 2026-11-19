@@ -20,8 +20,8 @@ use crate::{
     shared::{PointerFamily, RcPointer},
     shared_vector::AtomicSharedVector,
     unrolled::{
-        list_from_cell, ChunkHead, ConsumingWrapper, IterWrapper, UnrolledCell, UnrolledList,
-        INLINE_TAG, LINK_TAG_MASK,
+        ChunkHead, ConsumingWrapper, IterWrapper, UnrolledCell, UnrolledList, INLINE_TAG,
+        LINK_TAG_MASK,
     },
 };
 
@@ -271,9 +271,9 @@ impl<T: Clone, P: PointerFamily, const N: u32, const G: u32, D: DropHandler<Self
     #[doc(hidden)]
     pub fn nodes(&self) -> Vec<Self> {
         self.0
-            .node_iter()
-            .map(|x| {
-                let mut x = list_from_cell::<T, P, N, G>(x);
+            .clone()
+            .into_node_iter()
+            .map(|mut x| {
                 P::make_mut(&mut x.0).next.set(None);
                 Self(x, PhantomData)
             })
@@ -2015,6 +2015,42 @@ mod cursor_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod nodes_tests {
+    use crate::list::{List, SharedList};
+
+    #[test]
+    fn nodes_splits_into_single_cells() {
+        let list: List<usize> = (0..600).collect();
+        let nodes = list.nodes();
+        assert!(nodes.len() > 1);
+        let flattened: Vec<usize> = nodes.iter().flat_map(|node| node.iter().copied()).collect();
+        assert_eq!(flattened, (0..600).collect::<Vec<_>>());
+        // The original is untouched
+        assert_eq!(list.len(), 600);
+    }
+
+    #[test]
+    fn nodes_of_inline_cells() {
+        let mut list = List::new();
+        for i in 0..5usize {
+            list = List::cons(i, list.clone());
+        }
+        let nodes = list.nodes();
+        assert_eq!(nodes.len(), 5);
+        let flattened: Vec<usize> = nodes.iter().flat_map(|node| node.iter().copied()).collect();
+        assert_eq!(flattened, vec![4, 3, 2, 1, 0]);
+    }
+
+    #[test]
+    fn nodes_shared() {
+        let list: SharedList<usize> = (0..600).collect();
+        let nodes = list.nodes();
+        let flattened: Vec<usize> = nodes.iter().flat_map(|node| node.iter().copied()).collect();
+        assert_eq!(flattened, (0..600).collect::<Vec<_>>());
     }
 }
 

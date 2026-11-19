@@ -262,6 +262,13 @@ impl<T: Clone, R: RefCount, A: Allocator + Clone> RefCountedVector<T, R, A> {
     pub fn into_unique(mut self) -> Vector<T, A> {
         self.ensure_unique();
 
+        // A buffer with no capacity is still a header allocation here, but a
+        // `Vector` with no capacity is unallocated and would never free it
+        if self.capacity() == 0 {
+            let allocator = unsafe { self.inner.as_ref().allocator.clone() };
+            return Vector::new_in(allocator);
+        }
+
         unsafe {
             let data = NonNull::new_unchecked(self.data_ptr());
             let header = self.vec_header().clone();

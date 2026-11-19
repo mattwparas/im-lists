@@ -93,8 +93,8 @@ impl<T> Drop for Drain<'_, T> {
                         let start = source_vec.len();
                         let tail = self.0.tail_start;
                         if tail != start {
-                            let src = source_vec.as_ptr().add(tail);
-                            let dst = source_vec.as_mut_ptr().add(start);
+                            let src = source_vec.data_ptr().add(tail);
+                            let dst = source_vec.data_ptr().add(start);
                             ptr::copy(src, dst, self.0.tail_len);
                         }
                         source_vec.header.len = (start + self.0.tail_len) as u32;
@@ -106,7 +106,7 @@ impl<T> Drop for Drain<'_, T> {
         let iter = mem::replace(&mut self.iter, (&mut []).iter());
         let drop_len = iter.len();
 
-        let mut vec = self.vec;
+        let vec = self.vec;
 
         // if T::IS_ZST {
         //     // ZSTs have no identity, so we don't need to move them around, we only need to drop the correct amount.
@@ -138,7 +138,7 @@ impl<T> Drop for Drain<'_, T> {
             // a pointer with mutable provenance is necessary. Therefore we must reconstruct
             // it from the original vec but also avoid creating a &mut to the front since that could
             // invalidate raw pointers to it which some unsafe code might rely on.
-            let vec_ptr = vec.as_mut().as_mut_ptr();
+            let vec_ptr = vec.as_ref().data_ptr();
             let drop_offset = sub_ptr(drop_ptr, vec_ptr);
             let to_drop = ptr::slice_from_raw_parts_mut(vec_ptr.add(drop_offset), drop_len);
             ptr::drop_in_place(to_drop);
