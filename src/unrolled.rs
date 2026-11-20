@@ -1792,15 +1792,19 @@ fn truncate<T: Clone>(value: &mut AtomicSharedVector<T>, index: usize) {
 }
 
 fn split_off<T: Clone>(value: &mut AtomicSharedVector<T>, index: usize) -> AtomicSharedVector<T> {
-    let capacity = value.len() - index;
-    let mut new = Vector::with_capacity(index);
-    for i in index..value.len() {
-        let value = value.get_mut(i).unwrap();
-        new.push(unsafe { core::ptr::read(value) })
+    let count = value.len() - index;
+    let mut new = Vector::with_capacity(count);
+
+    // Move the elements over one at a time, so that a panic part way
+    // through leaves each element in exactly one of the two vectors
+    for _ in 0..count {
+        if let Some(element) = value.pop() {
+            new.push(element);
+        }
     }
-    for _ in 0..capacity {
-        core::mem::forget(value.pop());
-    }
+
+    // Popping reversed the order
+    new.as_mut_slice().reverse();
 
     new.into_shared_atomic()
 }

@@ -2023,6 +2023,17 @@ mod nodes_tests {
     use crate::list::{List, SharedList};
 
     #[test]
+    fn zero_sized_elements() {
+        let list: List<()> = (0..600).map(|_| ()).collect();
+
+        assert_eq!(list.len(), 600);
+        assert_eq!(list.iter().count(), 600);
+        assert_eq!(list.take(10).len(), 10);
+        assert_eq!(list.clone().into_iter().count(), 600);
+        assert_eq!(list.into_iter().count(), 600);
+    }
+
+    #[test]
     fn nodes_splits_into_single_cells() {
         let list: List<usize> = (0..600).collect();
         let nodes = list.nodes();

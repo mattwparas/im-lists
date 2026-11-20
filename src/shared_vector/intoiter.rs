@@ -70,7 +70,7 @@ impl<T> RawValIter<T> {
         RawValIter {
             start: slice.as_ptr(),
             end: if mem::size_of::<T>() == 0 {
-                ((slice.as_ptr() as usize) + slice.len()) as *const _
+                slice.as_ptr().wrapping_byte_add(slice.len())
             } else if slice.len() == 0 {
                 slice.as_ptr()
             } else {
@@ -88,7 +88,7 @@ impl<T> Iterator for RawValIter<T> {
         } else {
             unsafe {
                 if mem::size_of::<T>() == 0 {
-                    self.start = (self.start as usize + 1) as *const _;
+                    self.start = self.start.wrapping_byte_add(1);
                     Some(ptr::read(NonNull::<T>::dangling().as_ptr()))
                 } else {
                     let old_ptr = self.start;
@@ -114,7 +114,7 @@ impl<T> DoubleEndedIterator for RawValIter<T> {
         } else {
             unsafe {
                 if mem::size_of::<T>() == 0 {
-                    self.end = (self.end as usize - 1) as *const _;
+                    self.end = self.end.wrapping_byte_sub(1);
                     Some(ptr::read(NonNull::<T>::dangling().as_ptr()))
                 } else {
                     self.end = self.end.offset(-1);
@@ -130,6 +130,36 @@ impl<T> ExactSizeIterator for RawValIter<T> {}
 #[cfg(test)]
 mod tests {
     use core::sync::atomic::AtomicUsize;
+
+    #[test]
+    fn into_iter_zero_sized() {
+        static DROPS: AtomicUsize = AtomicUsize::new(0);
+
+        struct Zst;
+
+        impl Drop for Zst {
+            fn drop(&mut self) {
+                DROPS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            }
+        }
+
+        let mut vector = crate::shared_vector::Vector::new();
+
+        for _ in 0..10 {
+            vector.push(Zst);
+        }
+
+        let mut iter = vector.into_iter();
+
+        assert_eq!(iter.len(), 10);
+        assert!(iter.next().is_some());
+        assert!(iter.next_back().is_some());
+        assert_eq!(iter.len(), 8);
+
+        drop(iter);
+
+        assert_eq!(DROPS.load(core::sync::atomic::Ordering::Relaxed), 10);
+    }
 
     #[test]
     fn into_iter_test() {
